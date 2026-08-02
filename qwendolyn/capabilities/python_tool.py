@@ -4,13 +4,13 @@ import tempfile
 from pathlib import Path
 
 from qwendolyn import config
-from qwendolyn.tools.base import BaseTool
+from qwendolyn.capabilities.base import BaseCapability
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__, log_file="app")
 
 
-class PythonTool(BaseTool):
+class PythonCapability(BaseCapability):
     """
     Executes Python code in an isolated Python process.
 

@@ -1,19 +1,19 @@
-from qwendolyn.tools.base import BaseTool
+from qwendolyn.capabilities.base import BaseCapability
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__, log_file="app")
 
 
-class ToolRegistry:
+class CapabilityRegistry:
 
     def __init__(self):
 
-        self._tools: dict[str, BaseTool] = {}
+        self._tools: dict[str, BaseCapability] = {}
 
-    def register(self, tool: BaseTool):
+    def register(self, capability: BaseCapability):
 
-        self._tools[tool.name] = tool
-        logger.info("Registered tool %s", tool.name)
+        self._tools[capability.name] = capability
+        logger.info("Registered capability %s", capability.name)
 
     def get(self, name: str):
 
@@ -24,7 +24,7 @@ class ToolRegistry:
 
     def run(self, name: str, **kwargs):
 
-        logger.info("Running tool %s", name)
+        logger.info("Running capability %s", name)
         return self.get(name).run(**kwargs)
 
     def list_tools(self):

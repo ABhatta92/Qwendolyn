@@ -1,13 +1,13 @@
 from pathlib import Path
 
 from qwendolyn import config
-from qwendolyn.tools.base import BaseTool
+from qwendolyn.capabilities.base import BaseCapability
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__, log_file="app")
 
 
-class FileSystemTool(BaseTool):
+class FileSystemCapability(BaseCapability):
 
     def __init__(self, workspace: str | Path | None = None):
         super().__init__(

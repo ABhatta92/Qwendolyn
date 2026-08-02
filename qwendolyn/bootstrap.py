@@ -1,25 +1,24 @@
 from qwendolyn.config import FILES, WORKSPACE
 
-from qwendolyn.llm import OllamaLLM
 from qwendolyn.agent import Agent
-
-from qwendolyn.tools.registry import ToolRegistry
-from qwendolyn.tools.filesystem import FileSystemTool
-from qwendolyn.tools.python_tool import PythonTool
+from qwendolyn.llm import OllamaLLM
+from qwendolyn.capabilities.registry import CapabilityRegistry
+from qwendolyn.capabilities.filesystem import FileSystemCapability
+from qwendolyn.capabilities.python_tool import PythonCapability
 
 
 def create_agent():
 
     llm = OllamaLLM()
 
-    registry = ToolRegistry()
+    registry = CapabilityRegistry()
 
     registry.register(
-        FileSystemTool(WORKSPACE)
+        FileSystemCapability(WORKSPACE)
     )
 
     registry.register(
-        PythonTool(FILES)
+        PythonCapability(FILES)
     )
 
     return Agent(
