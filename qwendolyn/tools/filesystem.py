@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from qwendolyn.tools.base import BaseTool
+from qwendolyn.utils.logging import get_logger
+
+logger = get_logger(__name__, log_file="app")
 
 
 class FileSystemTool(BaseTool):
@@ -13,6 +16,7 @@ class FileSystemTool(BaseTool):
 
         self.workspace = Path(workspace).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
+        logger.info("Initialized filesystem tool for %s", self.workspace)
 
     def _resolve(self, path: str) -> Path:
 

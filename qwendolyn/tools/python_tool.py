@@ -4,6 +4,9 @@ import tempfile
 from pathlib import Path
 
 from qwendolyn.tools.base import BaseTool
+from qwendolyn.utils.logging import get_logger
+
+logger = get_logger(__name__, log_file="app")
 
 
 class PythonTool(BaseTool):
@@ -22,6 +25,7 @@ class PythonTool(BaseTool):
 
         self.working_directory = Path(working_directory).resolve()
         self.working_directory.mkdir(parents=True, exist_ok=True)
+        logger.info("Initialized Python tool for %s", self.working_directory)
 
     def execute(self, code: str) -> dict:
 
@@ -37,6 +41,7 @@ class PythonTool(BaseTool):
             script = Path(f.name)
 
         try:
+            logger.info("Executing Python snippet in %s", self.working_directory)
 
             result = subprocess.run(
                 [sys.executable, str(script)],
@@ -54,6 +59,7 @@ class PythonTool(BaseTool):
             }
 
         except subprocess.TimeoutExpired:
+            logger.error("Python execution timed out for working directory %s", self.working_directory)
 
             return {
                 "success": False,

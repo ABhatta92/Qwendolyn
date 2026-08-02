@@ -3,6 +3,10 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
+from qwendolyn.utils.logging import get_logger
+
+logger = get_logger(__name__, log_file="llm")
+
 
 class OllamaLLM:
 
@@ -24,11 +28,15 @@ class OllamaLLM:
             "analyst": self._load_prompt("analyst.txt"),
         }
 
+        logger.info("Initialized Ollama LLM for model %s", model_name)
+
     def _load_prompt(self, filename: str) -> str:
         prompt_path = Path(__file__).parent / "prompts" / filename
+        logger.info("Loading prompt file %s", filename)
         return prompt_path.read_text(encoding="utf-8")
 
     def invoke(self, prompt: str, mode: str = "dev") -> str:
+        logger.info("Invoking LLM in %s mode", mode)
 
         messages = [
             SystemMessage(content=self.prompts[mode]),
@@ -36,5 +44,6 @@ class OllamaLLM:
         ]
 
         response = self.llm.invoke(messages)
+        logger.info("Received LLM response for %s mode", mode)
 
         return response.content
