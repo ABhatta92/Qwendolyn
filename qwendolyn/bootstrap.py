@@ -35,9 +35,7 @@ def create_agent(
     )
 
     registry.register(
-            DatabaseCapability(
-                working_directory=FILES,
-            )
+            DatabaseCapability()
         )
 
     return Agent(
