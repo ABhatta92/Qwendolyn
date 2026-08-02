@@ -1,10 +1,6 @@
 import logging
-from pathlib import Path
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LOG_DIR = PROJECT_ROOT / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+from qwendolyn import config
 
 
 def _default_log_file(name: str) -> str:
@@ -41,7 +37,7 @@ def get_logger(name: str, log_file: str | None = None):
     )
 
     target_log_file = log_file or _default_log_file(name)
-    file_handler = logging.FileHandler(LOG_DIR / f"{target_log_file}.log", encoding="utf-8")
+    file_handler = logging.FileHandler(config.LOGS / f"{target_log_file}.log", encoding="utf-8")
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()

@@ -3,6 +3,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from qwendolyn import config
 from qwendolyn.tools.base import BaseTool
 from qwendolyn.utils.logging import get_logger
 
@@ -17,13 +18,13 @@ class PythonTool(BaseTool):
     code in the configured working directory.
     """
 
-    def __init__(self, working_directory: str | Path):
+    def __init__(self, working_directory: str | Path | None = None):
         super().__init__(
             name="python",
             description="Execute Python code in an isolated interpreter.",
         )
 
-        self.working_directory = Path(working_directory).resolve()
+        self.working_directory = Path(working_directory or config.WORKSPACE).resolve()
         self.working_directory.mkdir(parents=True, exist_ok=True)
         logger.info("Initialized Python tool for %s", self.working_directory)
 
