@@ -1,21 +1,26 @@
 import streamlit as st
-from llm import OllamaLLM
 
-st.set_page_config(page_title="Ollama Agent", layout="wide")
+from qwendolyn.llm import OllamaLLM
 
-st.title("Qwendolyn Prototype")
+st.title("Qwendolyn")
 
 if "llm" not in st.session_state:
     st.session_state.llm = OllamaLLM()
 
-prompt = st.text_area("Command", height=180)
+prompt = st.text_area("Prompt")
 
-if st.button("Run"):
-    if prompt.strip():
-        with st.spinner("Thinking..."):
-            try:
-                response = st.session_state.llm.invoke(prompt)
-                st.subheader("Response")
-                st.write(response)
-            except Exception as e:
-                st.error(str(e))
+col1, col2 = st.columns(2)
+
+with col1:
+    dev = st.button("👨‍💻 Dev")
+
+with col2:
+    analyst = st.button("📊 Analyst")
+
+if dev:
+    response = st.session_state.llm.invoke(prompt, mode="dev")
+    st.write(response)
+
+if analyst:
+    response = st.session_state.llm.invoke(prompt, mode="analyst")
+    st.write(response)
