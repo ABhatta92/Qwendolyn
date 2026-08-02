@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from qwendolyn import config
 from qwendolyn.capabilities.base import BaseCapability
@@ -12,23 +13,52 @@ logger = get_logger(__name__, log_file="app")
 
 class PythonCapability(BaseCapability):
     """
-    Executes Python code in an isolated Python process.
-
-    The tool is unaware of the overall workspace layout. It simply executes
-    code in the configured working directory.
+    Executes Python code in an isolated Python interpreter.
     """
 
     def __init__(self, working_directory: str | Path | None = None):
         super().__init__(
             name="python",
-            description="Execute Python code in an isolated interpreter.",
+            description="Execute Python code in an isolated Python interpreter.",
         )
 
-        self.working_directory = Path(working_directory or config.WORKSPACE).resolve()
-        self.working_directory.mkdir(parents=True, exist_ok=True)
-        logger.info("Initialized Python tool for %s", self.working_directory)
+        self.working_directory = Path(
+            working_directory or config.WORKSPACE
+        ).resolve()
 
-    def execute(self, code: str) -> dict:
+        self.working_directory.mkdir(parents=True, exist_ok=True)
+
+        logger.info(
+            "Initialized Python capability for %s",
+            self.working_directory,
+        )
+
+    @property
+    def functions(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "execute_python",
+                    "description": (
+                        "Execute a Python script in an isolated interpreter. "
+                        "The current working directory is the workspace."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "code": {
+                                "type": "string",
+                                "description": "Python source code to execute.",
+                            }
+                        },
+                        "required": ["code"],
+                    },
+                },
+            }
+        ]
+
+    def execute_python(self, code: str) -> dict:
 
         with tempfile.NamedTemporaryFile(
             suffix=".py",
@@ -36,20 +66,24 @@ class PythonCapability(BaseCapability):
             delete=False,
             mode="w",
             encoding="utf-8",
-        ) as f:
+        ) as file:
 
-            f.write(code)
-            script = Path(f.name)
+            file.write(code)
+            script = Path(file.name)
 
         try:
-            logger.info("Executing Python snippet in %s", self.working_directory)
+
+            logger.info(
+                "Executing Python snippet in %s",
+                self.working_directory,
+            )
 
             result = subprocess.run(
                 [sys.executable, str(script)],
                 cwd=self.working_directory,
                 capture_output=True,
                 text=True,
-                timeout=300,          # 5 minute timeout
+                timeout=300,
             )
 
             return {
@@ -60,7 +94,10 @@ class PythonCapability(BaseCapability):
             }
 
         except subprocess.TimeoutExpired:
-            logger.error("Python execution timed out for working directory %s", self.working_directory)
+
+            logger.error(
+                "Python execution timed out."
+            )
 
             return {
                 "success": False,
@@ -73,6 +110,19 @@ class PythonCapability(BaseCapability):
 
             script.unlink(missing_ok=True)
 
-    def run(self, code: str, **kwargs):
+    def execute(
+        self,
+        function_name: str,
+        **kwargs: Any,
+    ) -> Any:
 
-        return self.execute(code)
+        functions = {
+            "execute_python": self.execute_python,
+        }
+
+        if function_name not in functions:
+            raise ValueError(
+                f"Unknown Python function '{function_name}'."
+            )
+
+        return functions[function_name](**kwargs)

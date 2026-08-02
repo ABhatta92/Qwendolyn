@@ -1,24 +1,36 @@
-from qwendolyn.config import FILES, WORKSPACE
-
 from qwendolyn.agent import Agent
-from qwendolyn.llm import OllamaLLM
-from qwendolyn.capabilities.registry import CapabilityRegistry
 from qwendolyn.capabilities.filesystem import FileSystemCapability
 from qwendolyn.capabilities.python_tool import PythonCapability
+from qwendolyn.capabilities.registry import CapabilityRegistry
+from qwendolyn.config import FILES, WORKSPACE
+from qwendolyn.llm import OllamaLLM
 
 
-def create_agent():
+def create_agent(
+    model_name: str = "qwen3",
+    temperature: float = 0.2,
+) -> Agent:
+    """
+    Creates and wires together the Qwendolyn application.
+    """
 
-    llm = OllamaLLM()
+    llm = OllamaLLM(
+        model_name=model_name,
+        temperature=temperature,
+    )
 
     registry = CapabilityRegistry()
 
     registry.register(
-        FileSystemCapability(WORKSPACE)
+        FileSystemCapability(
+            workspace=WORKSPACE,
+        )
     )
 
     registry.register(
-        PythonCapability(FILES)
+        PythonCapability(
+            working_directory=FILES,
+        )
     )
 
     return Agent(

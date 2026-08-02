@@ -1,3 +1,5 @@
+from typing import Any
+
 from qwendolyn.capabilities.base import BaseCapability
 from qwendolyn.utils.logging import get_logger
 
@@ -8,28 +10,79 @@ class CapabilityRegistry:
 
     def __init__(self):
 
-        self._tools: dict[str, BaseCapability] = {}
+        self._capabilities: dict[str, BaseCapability] = {}
+        self._function_map: dict[str, BaseCapability] = {}
 
     def register(self, capability: BaseCapability):
 
-        self._tools[capability.name] = capability
-        logger.info("Registered capability %s", capability.name)
+        self._capabilities[capability.name] = capability
 
-    def get(self, name: str):
+        for function in capability.functions:
 
-        if name not in self._tools:
-            raise ValueError(f"Unknown tool '{name}'")
+            function_name = function["function"]["name"]
 
-        return self._tools[name]
+            if function_name in self._function_map:
+                raise ValueError(
+                    f"Function '{function_name}' is already registered."
+                )
 
-    def run(self, name: str, **kwargs):
+            self._function_map[function_name] = capability
 
-        logger.info("Running capability %s", name)
-        return self.get(name).run(**kwargs)
+        logger.info(
+            "Registered capability '%s' with %d functions",
+            capability.name,
+            len(capability.functions),
+        )
 
-    def list_tools(self):
+    def get_capability(self, name: str) -> BaseCapability:
+
+        if name not in self._capabilities:
+            raise ValueError(
+                f"Unknown capability '{name}'."
+            )
+
+        return self._capabilities[name]
+
+    def get_function(self, function_name: str) -> BaseCapability:
+
+        if function_name not in self._function_map:
+            raise ValueError(
+                f"Unknown function '{function_name}'."
+            )
+
+        return self._function_map[function_name]
+
+    def execute(
+        self,
+        function_name: str,
+        **kwargs: Any,
+    ) -> Any:
+
+        capability = self.get_function(function_name)
+
+        logger.info(
+            "Executing function '%s' via capability '%s'",
+            function_name,
+            capability.name,
+        )
+
+        return capability.execute(
+            function_name=function_name,
+            **kwargs,
+        )
+
+    def schemas(self) -> list[dict]:
+
+        schemas: list[dict] = []
+
+        for capability in self._capabilities.values():
+            schemas.extend(capability.functions)
+
+        return schemas
+
+    def list_capabilities(self) -> dict[str, str]:
 
         return {
-            name: tool.description
-            for name, tool in self._tools.items()
+            capability.name: capability.description
+            for capability in self._capabilities.values()
         }

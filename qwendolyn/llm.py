@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_ollama import ChatOllama
 
 from qwendolyn.utils.logging import get_logger
@@ -24,26 +24,70 @@ class OllamaLLM:
         )
 
         self.prompts = {
-            "dev": self._load_prompt("developer.txt"),
+            "developer": self._load_prompt("developer.txt"),
             "analyst": self._load_prompt("analyst.txt"),
         }
 
-        logger.info("Initialized Ollama LLM for model %s", model_name)
+        logger.info(
+            "Initialized Ollama LLM for model '%s'",
+            model_name,
+        )
 
     def _load_prompt(self, filename: str) -> str:
+
         prompt_path = Path(__file__).parent / "prompts" / filename
-        logger.info("Loading prompt file %s", filename)
+
+        logger.info("Loading prompt '%s'", filename)
+
         return prompt_path.read_text(encoding="utf-8")
 
-    def invoke(self, prompt: str, mode: str = "dev") -> str:
-        logger.info("Invoking LLM in %s mode", mode)
+    def invoke(
+        self,
+        messages: list,
+        persona: str = "developer",
+        tools: list | None = None,
+    ):
+        """
+        Invoke the model.
 
-        messages = [
-            SystemMessage(content=self.prompts[mode]),
-            HumanMessage(content=prompt),
+        Parameters
+        ----------
+        messages
+            Conversation messages excluding the system prompt.
+
+        persona
+            developer | analyst
+
+        tools
+            OpenAI/Qwen-compatible tool definitions.
+        """
+
+        logger.info(
+            "Invoking LLM (persona=%s, tools=%d)",
+            persona,
+            len(tools) if tools else 0,
+        )
+
+        full_messages = [
+            SystemMessage(
+                content=self.prompts[persona]
+            ),
+            *messages,
         ]
 
-        response = self.llm.invoke(messages)
-        logger.info("Received LLM response for %s mode", mode)
+        if tools:
 
-        return response.content
+            response = self.llm.bind_tools(
+                tools
+            ).invoke(full_messages)
+
+        else:
+
+            response = self.llm.invoke(full_messages)
+
+        logger.info(
+            "Received response (tool_calls=%d)",
+            len(response.tool_calls),
+        )
+
+        return response

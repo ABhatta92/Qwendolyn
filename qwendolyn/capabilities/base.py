@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class BaseCapability(ABC):
     """
-    Base class for every tool exposed to the LLM.
+    Base class for all capabilities exposed to the agent.
+
+    A capability represents a domain (filesystem, python, git, sql, etc.)
+    and can expose one or more callable functions to the LLM.
     """
 
     def __init__(
@@ -16,30 +20,43 @@ class BaseCapability(ABC):
 
     @property
     @abstractmethod
-    def parameters(self) -> dict:
+    def functions(self) -> list[dict]:
         """
-        JSON Schema describing the capability arguments.
-        """
-        pass
+        Returns all OpenAI/Qwen-compatible function definitions
+        exposed by this capability.
 
-    @property
-    def schema(self) -> dict:
-        """
-        OpenAI/Qwen compatible tool schema.
-        """
+        Example:
 
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
+        [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    ...
+                }
             },
-        }
+            {
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    ...
+                }
+            }
+        ]
+        """
+        raise NotImplementedError
 
     @abstractmethod
-    def run(self, **kwargs):
+    def execute(
+        self,
+        function_name: str,
+        **kwargs: Any,
+    ) -> Any:
         """
-        Execute the capability.
+        Execute one of the capability's functions.
+
+        Example
+
+            execute("read_file", path="hello.txt")
         """
-        pass
+        raise NotImplementedError
