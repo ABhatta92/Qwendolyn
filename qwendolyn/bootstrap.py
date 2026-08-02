@@ -1,6 +1,7 @@
 from qwendolyn.agent import Agent
 from qwendolyn.capabilities.filesystem import FileSystemCapability
 from qwendolyn.capabilities.python_tool import PythonCapability
+from qwendolyn.capabilities.database import DatabaseCapability
 from qwendolyn.capabilities.registry import CapabilityRegistry
 from qwendolyn.config import FILES, WORKSPACE
 from qwendolyn.llm import OllamaLLM
@@ -32,6 +33,12 @@ def create_agent(
             working_directory=FILES,
         )
     )
+
+    registry.register(
+            DatabaseCapability(
+                working_directory=FILES,
+            )
+        )
 
     return Agent(
         llm=llm,

@@ -17,6 +17,8 @@ pydantic
 # Data
 pandas
 numpy
+duckdb
+chromadb
 
 # Pretty terminal output
 rich
