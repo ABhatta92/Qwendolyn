@@ -1,100 +1,65 @@
 from pathlib import Path
 
+from qwendolyn.tools.base import BaseTool
 
-class FileSystemTool:
-    """
-    Provides safe access to a predefined workspace.
 
-    All paths are resolved relative to the workspace directory.
-    """
+class FileSystemTool(BaseTool):
 
     def __init__(self, workspace: str = "workspace"):
+        super().__init__(
+            name="filesystem",
+            description="Read, write and manage files inside the workspace.",
+        )
+
         self.workspace = Path(workspace).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
 
     def _resolve(self, path: str) -> Path:
-        """
-        Resolve a relative path inside the workspace.
-
-        Raises:
-            ValueError if the path escapes the workspace.
-        """
 
         target = (self.workspace / path).resolve()
 
         if self.workspace not in target.parents and target != self.workspace:
-            raise ValueError("Access outside workspace is not allowed.")
+            raise ValueError("Cannot access files outside workspace.")
 
         return target
 
-    def list_files(self, recursive: bool = True) -> list[str]:
-        """
-        Returns all files in the workspace.
-        """
-
-        pattern = "**/*" if recursive else "*"
+    def list_files(self):
 
         return [
-            str(file.relative_to(self.workspace))
-            for file in self.workspace.glob(pattern)
-            if file.is_file()
+            str(f.relative_to(self.workspace))
+            for f in self.workspace.rglob("*")
+            if f.is_file()
         ]
 
-    def read_file(self, path: str) -> str:
-        """
-        Reads a text file.
-        """
+    def read_file(self, path: str):
 
-        file = self._resolve(path)
-
-        if not file.exists():
-            raise FileNotFoundError(path)
-
-        return file.read_text(encoding="utf-8")
+        return self._resolve(path).read_text(encoding="utf-8")
 
     def write_file(self, path: str, content: str):
-        """
-        Creates or overwrites a file.
-        """
 
         file = self._resolve(path)
-
         file.parent.mkdir(parents=True, exist_ok=True)
-
         file.write_text(content, encoding="utf-8")
 
-    def append_file(self, path: str, content: str):
-        """
-        Appends text to a file.
-        """
-
-        file = self._resolve(path)
-
-        file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(file, "a", encoding="utf-8") as f:
-            f.write(content)
-
     def delete_file(self, path: str):
-        """
-        Deletes a file.
-        """
 
-        file = self._resolve(path)
+        self._resolve(path).unlink(missing_ok=True)
 
-        if file.exists():
-            file.unlink()
-
-    def exists(self, path: str) -> bool:
-        """
-        Returns True if the file exists.
-        """
+    def exists(self, path: str):
 
         return self._resolve(path).exists()
 
-    def make_directory(self, path: str):
-        """
-        Creates a directory.
-        """
+    def run(self, operation: str, **kwargs):
 
-        self._resolve(path).mkdir(parents=True, exist_ok=True)
+        operations = {
+            "list": self.list_files,
+            "read": self.read_file,
+            "write": self.write_file,
+            "delete": self.delete_file,
+            "exists": self.exists,
+        }
+
+        if operation not in operations:
+            raise ValueError(f"Unknown filesystem operation: {operation}")
+
+        return operations[operation](**kwargs)
