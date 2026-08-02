@@ -1,14 +1,65 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "qwendolyn"
 version = "0.1.0"
-requires-python = ">=3.12"
+description = "A local LLM agent powered by Ollama and LangChain"
+readme = "README.md"
+requires-python = ">=3.11"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+dependencies = [
+    # LLM
+    "ollama>=0.5.0",
+    "langchain>=0.3.27",
+    "langchain-core>=0.3.70",
+    "langchain-ollama>=0.3.6",
 
-[tool.setuptools]
-package-dir = {"" = "src"}
+    # UI
+    "streamlit>=1.48.0",
+
+    # Data
+    "pandas>=2.3.0",
+    "numpy>=2.3.0",
+
+    # Configuration
+    "python-dotenv>=1.1.0",
+    "PyYAML>=6.0.2",
+
+    # Validation
+    "pydantic>=2.11.0",
+
+    # Utilities
+    "rich>=14.0.0",
+    "watchdog>=6.0.0",
+]
+
+[project.optional-dependencies]
+
+docs = [
+    "python-docx",
+    "pymupdf",
+    "openpyxl",
+]
+
+ai = [
+    "sentence-transformers",
+    "faiss-cpu",
+]
+
+dev = [
+    "pytest",
+    "black",
+    "isort",
+    "ruff",
+]
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 100
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"

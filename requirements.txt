@@ -1,2 +1,29 @@
+# Core LLM
+ollama
 langchain
+langchain-core
 langchain-ollama
+
+# UI
+streamlit
+
+# Config
+python-dotenv
+PyYAML
+
+# Validation
+pydantic
+
+# Data
+pandas
+numpy
+
+# Pretty terminal output
+rich
+
+# Useful utilities
+watchdog
+
+# Future-proofing
+jinja2
+tqdm
