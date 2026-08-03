@@ -4,7 +4,7 @@ from typing import Any
 import duckdb
 
 from qwendolyn import config
-from qwendolyn.capabilities.base import BaseCapability
+from qwendolyn.capabilities.base import BaseCapability, CapabilityResult
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__, log_file="app")
@@ -12,7 +12,10 @@ logger = get_logger(__name__, log_file="app")
 
 class DatabaseCapability(BaseCapability):
 
-    def __init__(self, database: str | Path | None = None):
+    def __init__(
+        self,
+        database: str | Path | None = None,
+    ):
 
         super().__init__(
             name="database",
@@ -23,7 +26,10 @@ class DatabaseCapability(BaseCapability):
             database or config.DB / "qwendolyn.duckdb"
         ).resolve()
 
-        self.database.parent.mkdir(parents=True, exist_ok=True)
+        self.database.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         logger.info(
             "Initialized Database capability for %s",
@@ -47,9 +53,9 @@ class DatabaseCapability(BaseCapability):
                                 "description": "SQL statement to execute."
                             }
                         },
-                        "required": ["sql"]
-                    }
-                }
+                        "required": ["sql"],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -58,9 +64,9 @@ class DatabaseCapability(BaseCapability):
                     "description": "List every table in the database.",
                     "parameters": {
                         "type": "object",
-                        "properties": {}
-                    }
-                }
+                        "properties": {},
+                    },
+                },
             },
             {
                 "type": "function",
@@ -69,9 +75,9 @@ class DatabaseCapability(BaseCapability):
                     "description": "List every view in the database.",
                     "parameters": {
                         "type": "object",
-                        "properties": {}
-                    }
-                }
+                        "properties": {},
+                    },
+                },
             },
             {
                 "type": "function",
@@ -85,15 +91,15 @@ class DatabaseCapability(BaseCapability):
                                 "type": "string"
                             }
                         },
-                        "required": ["table"]
-                    }
-                }
+                        "required": ["table"],
+                    },
+                },
             },
             {
                 "type": "function",
                 "function": {
                     "name": "table_exists",
-                    "description": "Check if a table exists.",
+                    "description": "Check whether a table exists.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -101,9 +107,9 @@ class DatabaseCapability(BaseCapability):
                                 "type": "string"
                             }
                         },
-                        "required": ["table"]
-                    }
-                }
+                        "required": ["table"],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -117,9 +123,9 @@ class DatabaseCapability(BaseCapability):
                                 "type": "string"
                             }
                         },
-                        "required": ["table"]
-                    }
-                }
+                        "required": ["table"],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -138,10 +144,10 @@ class DatabaseCapability(BaseCapability):
                         },
                         "required": [
                             "path",
-                            "table_name"
-                        ]
-                    }
-                }
+                            "table_name",
+                        ],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -160,10 +166,10 @@ class DatabaseCapability(BaseCapability):
                         },
                         "required": [
                             "path",
-                            "table_name"
-                        ]
-                    }
-                }
+                            "table_name",
+                        ],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -182,10 +188,10 @@ class DatabaseCapability(BaseCapability):
                         },
                         "required": [
                             "table_name",
-                            "path"
-                        ]
-                    }
-                }
+                            "path",
+                        ],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -205,10 +211,10 @@ class DatabaseCapability(BaseCapability):
                         },
                         "required": [
                             "path",
-                            "sql"
-                        ]
-                    }
-                }
+                            "sql",
+                        ],
+                    },
+                },
             },
             {
                 "type": "function",
@@ -227,40 +233,67 @@ class DatabaseCapability(BaseCapability):
                         },
                         "required": [
                             "view_name",
-                            "sql"
-                        ]
-                    }
-                }
+                            "sql",
+                        ],
+                    },
+                },
             },
             {
                 "type": "function",
                 "function": {
                     "name": "vacuum",
-                    "description": "Run VACUUM on the DuckDB database.",
+                    "description": "Run VACUUM.",
                     "parameters": {
                         "type": "object",
-                        "properties": {}
-                    }
-                }
+                        "properties": {},
+                    },
+                },
             },
             {
                 "type": "function",
                 "function": {
                     "name": "checkpoint",
-                    "description": "Checkpoint the DuckDB database.",
+                    "description": "Checkpoint the database.",
                     "parameters": {
                         "type": "object",
-                        "properties": {}
-                    }
-                }
-            }
+                        "properties": {},
+                    },
+                },
+            },
         ]
 
     def _connect(self):
 
         return duckdb.connect(str(self.database))
 
-    def run_sql(self, sql: str):
+    def _success(
+        self,
+        message: str,
+        *,
+        data: Any = None,
+        tables: list[str] | None = None,
+        views: list[str] | None = None,
+        files: list[str] | None = None,
+        metrics: dict | None = None,
+    ) -> CapabilityResult:
+
+        return CapabilityResult(
+            success=True,
+            message=message,
+            data=data,
+            artifacts={
+                "files": files or [],
+                "tables": tables or [],
+                "views": views or [],
+                "vectors": [],
+            },
+            metrics=metrics or {},
+        )
+
+    def run_sql(
+        self,
+        sql: str,
+    ) -> CapabilityResult:
 
         logger.info("Executing SQL")
 
@@ -269,11 +302,22 @@ class DatabaseCapability(BaseCapability):
             result = conn.execute(sql)
 
             try:
-                return result.fetchdf().to_dict("records")
+
+                df = result.fetchdf()
+
+                return self._success(
+                    "SQL executed successfully.",
+                    data=df.to_dict("records"),
+                    metrics={
+                        "rows": len(df),
+                    },
+                )
+
             except Exception:
-                return {
-                    "success": True
-                }
+
+                return self._success(
+                    "SQL executed successfully."
+                )
 
     def list_tables(self):
 
@@ -281,29 +325,55 @@ class DatabaseCapability(BaseCapability):
 
     def list_views(self):
 
-        return self.run_sql("""
+        return self.run_sql(
+            """
             SELECT table_name
             FROM information_schema.views
-        """)
+            """
+        )
 
-    def describe_table(self, table: str):
-
-        return self.run_sql(f"DESCRIBE {table}")
-
-    def table_exists(self, table: str):
-
-        result = self.run_sql(f"""
-            SELECT COUNT(*) AS cnt
-            FROM information_schema.tables
-            WHERE table_name = '{table}'
-        """)
-
-        return result[0]["cnt"] > 0
-
-    def drop_table(self, table: str):
+    def describe_table(
+        self,
+        table: str,
+    ):
 
         return self.run_sql(
+            f"DESCRIBE {table}"
+        )
+
+    def table_exists(
+        self,
+        table: str,
+    ):
+
+        result = self.run_sql(
+            f"""
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.tables
+            WHERE table_name='{table}'
+            """
+        )
+
+        exists = bool(
+            result.data[0]["cnt"]
+        )
+
+        return self._success(
+            f"Table '{table}' {'exists' if exists else 'does not exist'}.",
+            data=exists,
+        )
+
+    def drop_table(
+        self,
+        table: str,
+    ):
+
+        self.run_sql(
             f"DROP TABLE IF EXISTS {table}"
+        )
+
+        return self._success(
+            f"Dropped table '{table}'."
         )
 
     def read_parquet(
@@ -312,11 +382,18 @@ class DatabaseCapability(BaseCapability):
         table_name: str,
     ):
 
-        return self.run_sql(f"""
+        self.run_sql(
+            f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{path}')
-        """)
+            """
+        )
+
+        return self._success(
+            f"Loaded '{path}' into table '{table_name}'.",
+            tables=[table_name],
+        )
 
     def append_parquet(
         self,
@@ -324,11 +401,18 @@ class DatabaseCapability(BaseCapability):
         table_name: str,
     ):
 
-        return self.run_sql(f"""
+        self.run_sql(
+            f"""
             INSERT INTO {table_name}
             SELECT *
             FROM read_parquet('{path}')
-        """)
+            """
+        )
+
+        return self._success(
+            f"Appended '{path}' to '{table_name}'.",
+            tables=[table_name],
+        )
 
     def write_parquet(
         self,
@@ -336,11 +420,18 @@ class DatabaseCapability(BaseCapability):
         path: str,
     ):
 
-        return self.run_sql(f"""
+        self.run_sql(
+            f"""
             COPY {table_name}
             TO '{path}'
             (FORMAT PARQUET)
-        """)
+            """
+        )
+
+        return self._success(
+            f"Exported '{table_name}' to '{path}'.",
+            files=[path],
+        )
 
     def query_parquet(
         self,
@@ -361,24 +452,39 @@ class DatabaseCapability(BaseCapability):
         sql: str,
     ):
 
-        return self.run_sql(f"""
+        self.run_sql(
+            f"""
             CREATE OR REPLACE VIEW {view_name} AS
             {sql}
-        """)
+            """
+        )
+
+        return self._success(
+            f"Created view '{view_name}'.",
+            views=[view_name],
+        )
 
     def vacuum(self):
 
-        return self.run_sql("VACUUM")
+        self.run_sql("VACUUM")
+
+        return self._success(
+            "VACUUM completed."
+        )
 
     def checkpoint(self):
 
-        return self.run_sql("CHECKPOINT")
+        self.run_sql("CHECKPOINT")
+
+        return self._success(
+            "Checkpoint completed."
+        )
 
     def execute(
         self,
         function_name: str,
         **kwargs: Any,
-    ):
+    ) -> CapabilityResult:
 
         functions = {
             "run_sql": self.run_sql,

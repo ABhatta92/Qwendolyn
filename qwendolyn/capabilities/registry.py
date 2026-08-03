@@ -1,6 +1,6 @@
 from typing import Any
 
-from qwendolyn.capabilities.base import BaseCapability
+from qwendolyn.capabilities.base import BaseCapability, CapabilityResult
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__, log_file="app")
@@ -13,9 +13,19 @@ class CapabilityRegistry:
         self._capabilities: dict[str, BaseCapability] = {}
         self._function_map: dict[str, BaseCapability] = {}
 
-    def register(self, capability: BaseCapability):
+    def register(
+        self,
+        capability: BaseCapability,
+    ) -> None:
 
-        self._capabilities[capability.name] = capability
+        if capability.name in self._capabilities:
+            raise ValueError(
+                f"Capability '{capability.name}' is already registered."
+            )
+
+        self._capabilities[
+            capability.name
+        ] = capability
 
         for function in capability.functions:
 
@@ -26,42 +36,54 @@ class CapabilityRegistry:
                     f"Function '{function_name}' is already registered."
                 )
 
-            self._function_map[function_name] = capability
+            self._function_map[
+                function_name
+            ] = capability
 
         logger.info(
-            "Registered capability '%s' with %d functions",
+            "Registered capability '%s' with %d function(s).",
             capability.name,
             len(capability.functions),
         )
 
-    def get_capability(self, name: str) -> BaseCapability:
+    def get_capability(
+        self,
+        name: str,
+    ) -> BaseCapability:
 
-        if name not in self._capabilities:
+        try:
+            return self._capabilities[name]
+
+        except KeyError:
             raise ValueError(
                 f"Unknown capability '{name}'."
-            )
+            ) from None
 
-        return self._capabilities[name]
+    def get_function(
+        self,
+        function_name: str,
+    ) -> BaseCapability:
 
-    def get_function(self, function_name: str) -> BaseCapability:
+        try:
+            return self._function_map[function_name]
 
-        if function_name not in self._function_map:
+        except KeyError:
             raise ValueError(
                 f"Unknown function '{function_name}'."
-            )
-
-        return self._function_map[function_name]
+            ) from None
 
     def execute(
         self,
         function_name: str,
         **kwargs: Any,
-    ) -> Any:
+    ) -> CapabilityResult:
 
-        capability = self.get_function(function_name)
+        capability = self.get_function(
+            function_name
+        )
 
         logger.info(
-            "Executing function '%s' via capability '%s'",
+            "Executing function '%s' via capability '%s'.",
             function_name,
             capability.name,
         )
@@ -76,7 +98,9 @@ class CapabilityRegistry:
         schemas: list[dict] = []
 
         for capability in self._capabilities.values():
-            schemas.extend(capability.functions)
+            schemas.extend(
+                capability.functions
+            )
 
         return schemas
 
@@ -85,4 +109,12 @@ class CapabilityRegistry:
         return {
             capability.name: capability.description
             for capability in self._capabilities.values()
+        }
+
+    def list_functions(self) -> dict[str, str]:
+
+        return {
+            function["function"]["name"]: capability.name
+            for capability in self._capabilities.values()
+            for function in capability.functions
         }

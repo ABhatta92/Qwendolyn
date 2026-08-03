@@ -1,13 +1,45 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any
+
+
+@dataclass(slots=True)
+class CapabilityResult:
+    """
+    Standard return type for every capability function.
+    """
+
+    success: bool
+    message: str
+
+    data: Any | None = None
+
+    artifacts: dict[str, list[str]] = field(
+        default_factory=lambda: {
+            "files": [],
+            "tables": [],
+            "views": [],
+            "vectors": [],
+        }
+    )
+
+    metrics: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+    logs: list[str] = field(
+        default_factory=list
+    )
+
+    error: dict[str, Any] | None = None
 
 
 class BaseCapability(ABC):
     """
     Base class for all capabilities exposed to the agent.
 
-    A capability represents a domain (filesystem, python, git, sql, etc.)
-    and can expose one or more callable functions to the LLM.
+    A capability represents a domain (filesystem, python, database, web, etc.)
+    and may expose one or more callable functions to the LLM.
     """
 
     def __init__(
@@ -22,41 +54,22 @@ class BaseCapability(ABC):
     @abstractmethod
     def functions(self) -> list[dict]:
         """
-        Returns all OpenAI/Qwen-compatible function definitions
-        exposed by this capability.
-
-        Example:
-
-        [
-            {
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    ...
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "write_file",
-                    ...
-                }
-            }
-        ]
+        Returns every OpenAI/Qwen-compatible function schema exposed
+        by this capability.
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def execute(
         self,
         function_name: str,
         **kwargs: Any,
-    ) -> Any:
+    ) -> CapabilityResult:
         """
         Execute one of the capability's functions.
 
         Example
-
+        -------
             execute("read_file", path="hello.txt")
         """
-        raise NotImplementedError
+        ...
