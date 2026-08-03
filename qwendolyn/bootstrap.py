@@ -30,7 +30,7 @@ def create_agent(
 
     registry.register(
         PythonCapability(
-            working_directory=FILES,
+            working_directory=WORKSPACE,
         )
     )
 
