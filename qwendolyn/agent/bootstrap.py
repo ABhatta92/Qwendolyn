@@ -1,9 +1,9 @@
-from qwendolyn.agent import Agent
+from qwendolyn.agent.agent import Agent
+from qwendolyn.capabilities.database import DatabaseCapability
 from qwendolyn.capabilities.filesystem import FileSystemCapability
 from qwendolyn.capabilities.python_tool import PythonCapability
-from qwendolyn.capabilities.database import DatabaseCapability
 from qwendolyn.capabilities.registry import CapabilityRegistry
-from qwendolyn.config import FILES, WORKSPACE
+from qwendolyn.config import DB, WORKSPACE
 from qwendolyn.llm import OllamaLLM
 
 
@@ -12,7 +12,7 @@ def create_agent(
     temperature: float = 0.2,
 ) -> Agent:
     """
-    Creates and wires together the Qwendolyn application.
+    Bootstrap the Qwendolyn agent.
     """
 
     llm = OllamaLLM(
@@ -35,8 +35,10 @@ def create_agent(
     )
 
     registry.register(
-            DatabaseCapability()
+        DatabaseCapability(
+            database=DB / "qwendolyn.duckdb",
         )
+    )
 
     return Agent(
         llm=llm,

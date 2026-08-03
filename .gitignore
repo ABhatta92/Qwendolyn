@@ -16,3 +16,4 @@ __init__.py
 workspace/
 tests/
 scratch.txt
+*.ipynb
