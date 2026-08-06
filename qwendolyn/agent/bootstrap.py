@@ -11,17 +11,18 @@ logger = get_logger(__name__)
 
 
 def create_agent(
-    model_name: str = "qwen3",
+    planner_model: str = "qwen2.5:1.5b",
+    responder_model: str = "qwen3",
     temperature: float = 0.2,
 ) -> Agent:
     """
     Bootstrap the Qwendolyn agent.
     """
 
-    logger.info("Bootstrapping Qwendolyn (model=%s, temperature=%s).", model_name, temperature)
-    llm = OllamaLLM(
-        model_name=model_name,
-        temperature=temperature,
+    logger.info(
+        "Bootstrapping Qwendolyn (planner=%s, responder=%s).",
+        planner_model,
+        responder_model,
     )
 
     registry = CapabilityRegistry()
@@ -44,9 +45,25 @@ def create_agent(
         )
     )
 
-    agent = Agent(
-        llm=llm,
-        registry=registry,
+    planner_llm = OllamaLLM(
+        model_name=planner_model,
+        temperature=temperature,
     )
-    logger.info("Qwendolyn bootstrap complete (capabilities=%s).", ", ".join(registry.list_capabilities()))
+
+    responder_llm = OllamaLLM(
+        model_name=responder_model,
+        temperature=temperature,
+    )
+
+    agent = Agent(
+        registry=registry,
+        planner_llm=planner_llm,
+        responder_llm=responder_llm,
+    )
+
+    logger.info(
+        "Qwendolyn bootstrap complete (capabilities=%s).",
+        ", ".join(registry.list_capabilities()),
+    )
+
     return agent

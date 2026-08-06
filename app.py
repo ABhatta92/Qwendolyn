@@ -11,6 +11,7 @@ st.set_page_config(
 
 st.title("Qwendolyn")
 
+
 # -----------------------------------------------------------------------------
 # Session State
 # -----------------------------------------------------------------------------
@@ -29,6 +30,13 @@ if "messages" not in st.session_state:
 with st.sidebar:
 
     st.header("Settings")
+
+    if st.button(
+        "🔄 Reinitialize Agent",
+        use_container_width=True,
+    ):
+        st.session_state.agent = create_agent()
+        st.success("Agent reinitialized.")
 
     if st.button(
         "🗑️ Clear Conversation",
@@ -52,12 +60,11 @@ for message in st.session_state.messages:
 # User Input
 # -----------------------------------------------------------------------------
 
-prompt = st.chat_input("Ask Qwendolyn...")
+prompt = st.chat_input("Give Qwendolyn a task...")
 
 
 if prompt:
 
-    # Display user message
     st.session_state.messages.append(
         {
             "role": "user",
@@ -68,24 +75,43 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Run agent
     with st.chat_message("assistant"):
 
-        with st.spinner("Planning and executing..."):
+        status = st.status(
+            "Planning task...",
+            expanded=True,
+        )
 
-            try:
+        try:
 
-                response = st.session_state.agent.run(
-                    prompt=prompt,
-                )
+            status.write("🧠 Planning")
+            status.write("⚙️ Executing capabilities")
+            status.write("✅ Verifying outputs")
+            status.write("📝 Preparing response")
 
-            except Exception as ex:
+            response = st.session_state.agent.run(
+                prompt=prompt,
+            )
 
-                response = f"❌ **Task failed**\n\n```text\n{ex}\n```"
+            status.update(
+                label="Task complete",
+                state="complete",
+            )
 
-            st.markdown(response)
+        except Exception as ex:
 
-    # Save assistant response
+            status.update(
+                label="Task failed",
+                state="error",
+            )
+
+            response = (
+                "❌ **Task failed**\n\n"
+                f"```text\n{ex}\n```"
+            )
+
+        st.markdown(response)
+
     st.session_state.messages.append(
         {
             "role": "assistant",
