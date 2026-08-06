@@ -9,7 +9,8 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Qwendolyn")
+st.title("🤖 Qwendolyn")
+st.caption("Your autonomous Python data engineer.")
 
 
 # -----------------------------------------------------------------------------
@@ -32,17 +33,17 @@ with st.sidebar:
     st.header("Settings")
 
     if st.button(
-        "🔄 Reinitialize Agent",
+        "🔄 Reload Agent",
         use_container_width=True,
     ):
         st.session_state.agent = create_agent()
-        st.success("Agent reinitialized.")
+        st.success("Agent reloaded.")
 
     if st.button(
         "🗑️ Clear Conversation",
         use_container_width=True,
     ):
-        st.session_state.messages = []
+        st.session_state.messages.clear()
         st.rerun()
 
 
@@ -57,11 +58,12 @@ for message in st.session_state.messages:
 
 
 # -----------------------------------------------------------------------------
-# User Input
+# Chat Input
 # -----------------------------------------------------------------------------
 
-prompt = st.chat_input("Give Qwendolyn a task...")
-
+prompt = st.chat_input(
+    "Describe the Python task..."
+)
 
 if prompt:
 
@@ -78,36 +80,36 @@ if prompt:
     with st.chat_message("assistant"):
 
         status = st.status(
-            "Planning task...",
+            "Running...",
             expanded=True,
         )
 
         try:
 
-            status.write("🧠 Planning")
-            status.write("⚙️ Executing capabilities")
-            status.write("✅ Verifying outputs")
-            status.write("📝 Preparing response")
+            status.write("🧠 Thinking")
+            status.write("🐍 Generating Python")
+            status.write("▶️ Executing")
+            status.write("🔁 Iterating until complete")
 
             response = st.session_state.agent.run(
                 prompt=prompt,
             )
 
             status.update(
-                label="Task complete",
+                label="Completed",
                 state="complete",
             )
 
         except Exception as ex:
 
-            status.update(
-                label="Task failed",
-                state="error",
+            response = (
+                "### ❌ Execution Failed\n\n"
+                f"```text\n{ex}\n```"
             )
 
-            response = (
-                "❌ **Task failed**\n\n"
-                f"```text\n{ex}\n```"
+            status.update(
+                label="Failed",
+                state="error",
             )
 
         st.markdown(response)
