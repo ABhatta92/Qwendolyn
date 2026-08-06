@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 
 from qwendolyn import config
-from qwendolyn.utils.logging import get_logger
+from qwendolyn.logging.run import Run
+from qwendolyn.logging.logger import get_logger
 
 logger = get_logger(__name__, log_file="runner")
 
@@ -52,6 +53,9 @@ class FrontendRunner:
     def execute(
         self,
         files: dict[str, str],
+        *,
+        run: Run | None = None,
+        iteration: int | None = None,
     ) -> dict:
 
         logger.info("=" * 80)
@@ -98,13 +102,21 @@ class FrontendRunner:
 
             logger.info("  + %s", relative)
 
+            if (
+                run is not None
+                and iteration is not None
+            ):
+                run.save_script(
+                    iteration,
+                    Path(relative_path).suffix.lstrip(".") or "txt",
+                    content,
+                )
+
         npm = shutil.which("npm")
 
         if npm is None:
 
-            logger.error("npm not found on PATH.")
-
-            return {
+            result = {
                 "success": False,
                 "stdout": "",
                 "stderr": "npm was not found on PATH.",
@@ -113,6 +125,17 @@ class FrontendRunner:
                 "created_files": written_files,
                 "url": None,
             }
+
+            if (
+                run is not None
+                and iteration is not None
+            ):
+                run.save_execution(
+                    iteration,
+                    result,
+                )
+
+            return result
 
         package_json = (
             self.project_directory / "package.json"
@@ -136,28 +159,9 @@ class FrontendRunner:
                     timeout=self.timeout,
                 )
 
-                if install.stdout.strip():
-
-                    logger.info("-" * 80)
-                    logger.info("NPM STDOUT")
-                    logger.info("-" * 80)
-                    logger.info(install.stdout)
-
-                if install.stderr.strip():
-
-                    logger.info("-" * 80)
-                    logger.info("NPM STDERR")
-                    logger.info("-" * 80)
-                    logger.info(install.stderr)
-
                 if install.returncode != 0:
 
-                    logger.error(
-                        "npm install failed (%d).",
-                        install.returncode,
-                    )
-
-                    return {
+                    result = {
                         "success": False,
                         "stdout": install.stdout,
                         "stderr": install.stderr,
@@ -166,6 +170,17 @@ class FrontendRunner:
                         "created_files": written_files,
                         "url": None,
                     }
+
+                    if (
+                        run is not None
+                        and iteration is not None
+                    ):
+                        run.save_execution(
+                            iteration,
+                            result,
+                        )
+
+                    return result
 
         server = (
             self.project_directory / "server.js"
@@ -195,51 +210,29 @@ class FrontendRunner:
             if process.stderr:
                 stderr = process.stderr.read()
 
-            execution_time = (
-                time.perf_counter() - start
-            )
-
-            logger.info(
-                "PID         : %s",
-                process.pid,
-            )
-
-            logger.info(
-                "Running     : %s",
-                process.poll() is None,
-            )
-
-            logger.info(
-                "Time        : %.2f sec",
-                execution_time,
-            )
-
-            if stdout.strip():
-
-                logger.info("-" * 80)
-                logger.info("STDOUT")
-                logger.info("-" * 80)
-                logger.info(stdout)
-
-            if stderr.strip():
-
-                logger.info("-" * 80)
-                logger.info("STDERR")
-                logger.info("-" * 80)
-                logger.info(stderr)
-
-            logger.info("=" * 80)
-
-            return {
+            result = {
                 "success": process.poll() is None,
                 "stdout": stdout,
                 "stderr": stderr,
                 "return_code": process.poll(),
-                "execution_time": execution_time,
+                "execution_time": time.perf_counter() - start,
                 "created_files": written_files,
                 "url": f"http://localhost:{self.port}",
                 "pid": process.pid,
             }
+
+            if (
+                run is not None
+                and iteration is not None
+            ):
+                run.save_execution(
+                    iteration,
+                    result,
+                )
+
+            logger.info("=" * 80)
+
+            return result
 
         after = {
             path.relative_to(self.working_directory)
@@ -252,32 +245,25 @@ class FrontendRunner:
             if not str(path).startswith("temp/")
         )
 
-        execution_time = (
-            time.perf_counter() - start
-        )
-
-        logger.info("Execution completed.")
-        logger.info("Time : %.2f sec", execution_time)
-
-        if created:
-
-            logger.info("Created Files:")
-
-            for file in created:
-                logger.info("  + %s", file)
-
-        else:
-
-            logger.info("Created Files: None")
-
-        logger.info("=" * 80)
-
-        return {
+        result = {
             "success": True,
             "stdout": "",
             "stderr": "",
             "return_code": 0,
-            "execution_time": execution_time,
+            "execution_time": time.perf_counter() - start,
             "created_files": created,
             "url": None,
         }
+
+        if (
+            run is not None
+            and iteration is not None
+        ):
+            run.save_execution(
+                iteration,
+                result,
+            )
+
+        logger.info("=" * 80)
+
+        return result

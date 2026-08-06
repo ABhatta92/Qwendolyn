@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
-from qwendolyn.utils.logging import get_logger
+from qwendolyn.logging.run import Run
+from qwendolyn.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -13,6 +15,13 @@ CODE_BLOCK = re.compile(
     r"```(?:python|html|javascript|js|json)?\s*(.*?)```",
     flags=re.DOTALL | re.IGNORECASE,
 )
+
+
+@dataclass(slots=True)
+class ExecutionState:
+    objective: str
+    iteration: int = 0
+    last_result: dict | None = None
 
 
 class Agent:
@@ -42,45 +51,75 @@ class Agent:
 
         return match.group(1).strip()
 
-    def _execution_message(
+    def _build_prompt(
         self,
-        result: dict,
-    ) -> HumanMessage:
+        state: ExecutionState,
+    ) -> str:
 
-        created_files = result.get(
-            "created_files",
-            [],
+        sections = [
+            "OBJECTIVE",
+            "---------",
+            state.objective,
+            "",
+        ]
+
+        if state.last_result is None:
+
+            sections.extend(
+                [
+                    "STATUS",
+                    "------",
+                    "No code has been executed yet.",
+                    "",
+                ]
+            )
+
+        else:
+
+            result = state.last_result
+
+            sections.extend(
+                [
+                    "LAST EXECUTION",
+                    "--------------",
+                    f"Success: {result['success']}",
+                    f"Return Code: {result['return_code']}",
+                    f"Execution Time: {result['execution_time']:.2f} sec",
+                    "",
+                    "Created Files",
+                    "-------------",
+                    "\n".join(result["created_files"])
+                    if result["created_files"]
+                    else "None",
+                    "",
+                    "STDOUT",
+                    "------",
+                    result["stdout"] or "<empty>",
+                    "",
+                    "STDERR",
+                    "------",
+                    result["stderr"] or "<empty>",
+                    "",
+                ]
+            )
+
+        sections.extend(
+            [
+                "INSTRUCTIONS",
+                "------------",
+                "Generate ONE complete executable program.",
+                "Do not explain your reasoning.",
+                "Do not output multiple solutions.",
+                "If another execution is required, output exactly one fenced code block.",
+                "If the objective has been completely achieved and no further execution is required, do NOT output a code block.",
+                "Instead respond with:",
+                "",
+                "TASK COMPLETE",
+                "<concise summary>",
+            ]
         )
 
-        return HumanMessage(
-            content=f"""
-Execution completed.
-
-Success
--------
-{result["success"]}
-
-Return Code
------------
-{result["return_code"]}
-
-Execution Time
---------------
-{result["execution_time"]:.2f} seconds
-
-Created Files
--------------
-{chr(10).join(created_files) if created_files else "None"}
-
-STDOUT
-------
-{result["stdout"]}
-
-STDERR
-------
-{result["stderr"]}
-""".strip()
-        )
+        return "\n".join(sections)
 
     def run(
         self,
@@ -92,54 +131,116 @@ STDERR
             self.language,
         )
 
-        messages = [
-            HumanMessage(
-                content=prompt,
-            )
-        ]
+        run = Run(
+            agent=self.language,
+            objective=prompt,
+        )
 
-        for iteration in range(
-            1,
-            self.max_iterations + 1,
-        ):
+        state = ExecutionState(
+            objective=prompt,
+        )
 
-            logger.info(
-                "Iteration %d",
-                iteration,
-            )
+        previous_code: str | None = None
 
-            response = self.llm.invoke(
-                messages,
-            )
+        try:
 
-            messages.append(
-                AIMessage(
-                    content=response.content,
-                )
-            )
+            for _ in range(
+                self.max_iterations,
+            ):
 
-            code = self._extract_code(
-                response.content,
-            )
-
-            if code is None:
+                iteration = run.next_iteration()
+                state.iteration = iteration
 
                 logger.info(
-                    "Task completed."
+                    "Iteration %d",
+                    iteration,
                 )
 
-                return response.content
-
-            result = self.runner.execute(
-                code,
-            )
-
-            messages.append(
-                self._execution_message(
-                    result,
+                prompt_text = self._build_prompt(
+                    state,
                 )
+
+                response = self.llm.invoke(
+                    [
+                        HumanMessage(
+                            content=prompt_text,
+                        )
+                    ],
+                    run=run,
+                    iteration=iteration,
+                )
+
+                content = str(
+                    response.content,
+                ).strip()
+
+                if content.startswith(
+                    "TASK COMPLETE"
+                ):
+
+                    logger.info(
+                        "Task completed."
+                    )
+
+                    run.finish(
+                        success=True,
+                    )
+
+                    return content
+
+                code = self._extract_code(
+                    content,
+                )
+
+                if code is None:
+
+                    logger.info(
+                        "No executable code returned."
+                    )
+
+                    run.finish(
+                        success=True,
+                    )
+
+                    return content
+
+                if previous_code == code:
+
+                    run.finish(
+                        success=False,
+                    )
+
+                    raise RuntimeError(
+                        "Agent generated identical code twice. Possible infinite loop."
+                    )
+
+                previous_code = code
+
+                logger.info(
+                    "Executing generated %s program.",
+                    self.language,
+                )
+
+                result = self.runner.execute(
+                    code,
+                    run=run,
+                    iteration=iteration,
+                )
+
+                state.last_result = result
+
+            run.finish(
+                success=False,
             )
 
-        raise RuntimeError(
-            f"Maximum iterations ({self.max_iterations}) exceeded."
-        )
+            raise RuntimeError(
+                f"Maximum iterations ({self.max_iterations}) exceeded."
+            )
+
+        except Exception:
+
+            run.finish(
+                success=False,
+            )
+
+            raise

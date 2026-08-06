@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+import time
 from pathlib import Path
 
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
-from qwendolyn.utils.logging import get_logger
+from qwendolyn.logging.run import Run
+from qwendolyn.logging.logger import get_logger
 
 logger = get_logger(__name__, log_file="llm")
 
@@ -26,6 +30,7 @@ class LLM:
         )
 
         if system_prompt is None:
+
             system_prompt = (
                 Path(__file__).parent
                 / "prompts"
@@ -39,7 +44,7 @@ class LLM:
         )
 
         logger.info(
-            "Initialized model='%s' temperature=%s prompt='%s'",
+            "Initialized model='%s' temperature=%.2f prompt='%s'",
             self.model_name,
             self.temperature,
             system_prompt,
@@ -48,6 +53,9 @@ class LLM:
     def invoke(
         self,
         messages: list[BaseMessage],
+        *,
+        run: Run | None = None,
+        iteration: int | None = None,
     ):
 
         prompt = [
@@ -68,23 +76,55 @@ class LLM:
             len(prompt),
         )
 
-        for index, message in enumerate(prompt, start=1):
+        prompt_text = []
 
-            logger.info("-" * 80)
-            logger.info(
-                "MESSAGE %d (%s)",
-                index,
-                message.__class__.__name__,
+        for index, message in enumerate(
+            prompt,
+            start=1,
+        ):
+
+            section = (
+                f"{'-' * 80}\n"
+                f"MESSAGE {index} ({message.__class__.__name__})\n"
+                f"{'-' * 80}\n"
+                f"{message.content}"
             )
-            logger.info(message.content)
 
-        response = self.llm.invoke(prompt)
+            prompt_text.append(section)
+
+            logger.info(section)
+
+        if (
+            run is not None
+            and iteration is not None
+        ):
+            run.save_prompt(
+                iteration,
+                "\n\n".join(prompt_text),
+            )
+
+        start = time.perf_counter()
+
+        response = self.llm.invoke(
+            prompt,
+        )
+
+        elapsed = time.perf_counter() - start
 
         logger.info("-" * 80)
         logger.info("MODEL RESPONSE")
         logger.info("-" * 80)
         logger.info(response.content)
-
+        logger.info("Inference Time: %.2f sec", elapsed)
         logger.info("=" * 80)
+
+        if (
+            run is not None
+            and iteration is not None
+        ):
+            run.save_response(
+                iteration,
+                str(response.content),
+            )
 
         return response
