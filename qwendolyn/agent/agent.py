@@ -4,15 +4,13 @@ import re
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from qwendolyn import config
-from qwendolyn.runtime.python_runner import PythonRunner
 from qwendolyn.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-PYTHON_BLOCK = re.compile(
-    r"```python\s*(.*?)```",
+CODE_BLOCK = re.compile(
+    r"```(?:python|html|javascript|js|json)?\s*(.*?)```",
     flags=re.DOTALL | re.IGNORECASE,
 )
 
@@ -22,25 +20,22 @@ class Agent:
     def __init__(
         self,
         llm,
+        runner,
+        language: str,
         max_iterations: int = 20,
     ):
 
         self.llm = llm
-        self.workspace = config.WORKSPACE
-        self.scripts = config.SCRIPTS
-
-        self.runner = PythonRunner(
-            working_directory=config.WORKSPACE,
-        )
-
+        self.runner = runner
+        self.language = language
         self.max_iterations = max_iterations
 
-    def _extract_python(
+    def _extract_code(
         self,
         response: str,
     ) -> str | None:
 
-        match = PYTHON_BLOCK.search(response)
+        match = CODE_BLOCK.search(response)
 
         if match is None:
             return None
@@ -52,13 +47,14 @@ class Agent:
         result: dict,
     ) -> HumanMessage:
 
+        created_files = result.get(
+            "created_files",
+            [],
+        )
+
         return HumanMessage(
             content=f"""
-Python execution completed.
-
-Script
-------
-{result["script"]}
+Execution completed.
 
 Success
 -------
@@ -74,7 +70,7 @@ Execution Time
 
 Created Files
 -------------
-{chr(10).join(result["created_files"]) if result["created_files"] else "None"}
+{chr(10).join(created_files) if created_files else "None"}
 
 STDOUT
 ------
@@ -91,7 +87,10 @@ STDERR
         prompt: str,
     ) -> str:
 
-        logger.info("Starting task.")
+        logger.info(
+            "Starting %s task.",
+            self.language,
+        )
 
         messages = [
             HumanMessage(
@@ -109,7 +108,9 @@ STDERR
                 iteration,
             )
 
-            response = self.llm.invoke(messages)
+            response = self.llm.invoke(
+                messages,
+            )
 
             messages.append(
                 AIMessage(
@@ -117,14 +118,14 @@ STDERR
                 )
             )
 
-            code = self._extract_python(
+            code = self._extract_code(
                 response.content,
             )
 
             if code is None:
 
                 logger.info(
-                    "No Python generated. Task complete."
+                    "Task completed."
                 )
 
                 return response.content

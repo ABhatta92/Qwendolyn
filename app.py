@@ -1,6 +1,6 @@
 import streamlit as st
 
-from qwendolyn.agent.bootstrap import create_agent
+from qwendolyn.agent.bootstrap import create_agents
 
 
 st.set_page_config(
@@ -10,15 +10,15 @@ st.set_page_config(
 )
 
 st.title("🤖 Qwendolyn")
-st.caption("Your autonomous Python data engineer.")
+st.caption("Your AI Workforce")
 
 
 # -----------------------------------------------------------------------------
 # Session State
 # -----------------------------------------------------------------------------
 
-if "agent" not in st.session_state:
-    st.session_state.agent = create_agent()
+if "agents" not in st.session_state:
+    st.session_state.agents = create_agents()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -30,14 +30,24 @@ if "messages" not in st.session_state:
 
 with st.sidebar:
 
-    st.header("Settings")
+    st.header("Agent")
+
+    agent_name = st.selectbox(
+        "Choose an agent",
+        options=[
+            "Python",
+            "Frontend",
+        ],
+    )
+
+    st.divider()
 
     if st.button(
-        "🔄 Reload Agent",
+        "🔄 Reload Agents",
         use_container_width=True,
     ):
-        st.session_state.agent = create_agent()
-        st.success("Agent reloaded.")
+        st.session_state.agents = create_agents()
+        st.success("Agents reloaded.")
 
     if st.button(
         "🗑️ Clear Conversation",
@@ -48,12 +58,17 @@ with st.sidebar:
 
 
 # -----------------------------------------------------------------------------
-# Conversation History
+# Conversation
 # -----------------------------------------------------------------------------
 
 for message in st.session_state.messages:
 
     with st.chat_message(message["role"]):
+
+        if message["role"] == "assistant":
+
+            st.caption(f"Agent: {message['agent']}")
+
         st.markdown(message["content"])
 
 
@@ -62,10 +77,12 @@ for message in st.session_state.messages:
 # -----------------------------------------------------------------------------
 
 prompt = st.chat_input(
-    "Describe the Python task..."
+    f"Ask the {agent_name} Agent..."
 )
 
 if prompt:
+
+    agent = st.session_state.agents[agent_name]
 
     st.session_state.messages.append(
         {
@@ -79,44 +96,27 @@ if prompt:
 
     with st.chat_message("assistant"):
 
-        status = st.status(
-            "Running...",
-            expanded=True,
-        )
+        st.caption(f"Agent: {agent_name}")
 
-        try:
+        with st.spinner(f"{agent_name} Agent working..."):
 
-            status.write("🧠 Thinking")
-            status.write("🐍 Generating Python")
-            status.write("▶️ Executing")
-            status.write("🔁 Iterating until complete")
+            try:
 
-            response = st.session_state.agent.run(
-                prompt=prompt,
-            )
+                response = agent.run(prompt)
 
-            status.update(
-                label="Completed",
-                state="complete",
-            )
+            except Exception as ex:
 
-        except Exception as ex:
+                response = (
+                    "### ❌ Task Failed\n\n"
+                    f"```text\n{ex}\n```"
+                )
 
-            response = (
-                "### ❌ Execution Failed\n\n"
-                f"```text\n{ex}\n```"
-            )
-
-            status.update(
-                label="Failed",
-                state="error",
-            )
-
-        st.markdown(response)
+            st.markdown(response)
 
     st.session_state.messages.append(
         {
             "role": "assistant",
+            "agent": agent_name,
             "content": response,
         }
     )
