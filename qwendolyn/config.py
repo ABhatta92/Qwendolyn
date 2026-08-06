@@ -8,8 +8,8 @@ CACHE = WORKSPACE / "cache"
 DB = WORKSPACE / "db"
 VECTOR_STORE = WORKSPACE / "vector_store"
 SCRIPTS = WORKSPACE / "scripts"
-REPORTS = WORKSPACE / "reports"
+WEB = WORKSPACE / "web"
 LOGS = PROJECT_ROOT / "logs"
 
-for path in (WORKSPACE, FILES, CACHE, DB, REPORTS, VECTOR_STORE, LOGS, SCRIPTS):
+for path in (WORKSPACE, FILES, CACHE, DB, WEB, VECTOR_STORE, LOGS, SCRIPTS):
     path.mkdir(parents=True, exist_ok=True)
