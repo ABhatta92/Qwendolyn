@@ -1,5 +1,5 @@
 from qwendolyn.agent.agent import Agent
-from qwendolyn.llm import LLM
+from qwendolyn.llm.llm import LLM
 
 
 def create_agent() -> Agent:
