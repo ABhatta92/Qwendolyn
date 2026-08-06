@@ -7,7 +7,7 @@ def create_python_agent() -> PythonAgent:
 
     llm = LLM(
         model_name="qwen3",
-        temperature=0.2,
+        temperature=0.1,
         system_prompt="qwendolyn/llm/prompts/python.txt",
     )
 
@@ -20,7 +20,7 @@ def create_frontend_agent() -> FrontendAgent:
 
     llm = LLM(
         model_name="qwen3",
-        temperature=0.2,
+        temperature=0.3,
         system_prompt="qwendolyn/llm/prompts/frontend.txt",
     )
 
