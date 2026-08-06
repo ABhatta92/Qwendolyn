@@ -1,58 +1,36 @@
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+"""LLM planner; it can select work but cannot produce the user response."""
+from __future__ import annotations
 
-from qwendolyn.utils.logging import get_logger
+from dataclasses import dataclass
+from typing import Any
 
-logger = get_logger(__name__, log_file="planner")
+from langchain_core.messages import HumanMessage
+
+
+@dataclass(slots=True)
+class PlannedCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(slots=True)
+class Plan:
+    calls: list[PlannedCall]
+    complete: bool
+    planner_note: str
 
 
 class Planner:
-
-    def __init__(
-        self,
-        llm,
-        registry,
-    ):
-
+    def __init__(self, llm: Any, registry: Any) -> None:
         self.llm = llm
         self.registry = registry
 
-    def plan(self, context: dict):
-
-        logger.info("Planning next action.")
-
-        messages = [
-            HumanMessage(
-                content=context["prompt"]
-            )
-        ]
-
-        # Replay execution history
-        for result in context["results"]:
-
-            messages.append(result["assistant"])
-
-            for tool in result["tools"]:
-
-                messages.append(
-                    ToolMessage(
-                        content=str(tool["result"]),
-                        tool_call_id=tool["tool_call_id"],
-                    )
-                )
-
-        response = self.llm.invoke(
-            messages=messages,
-            persona=context["persona"],
-            tools=self.registry.schemas(),
-        )
-
-        logger.info(
-            "Planner produced %d tool call(s).",
-            len(response.tool_calls),
-        )
-
-        return {
-            "assistant": response,
-            "tool_calls": response.tool_calls,
-            "complete": len(response.tool_calls) == 0,
-        }
+    def plan(self, objective: str, history: list[Any]) -> Plan:
+        messages: list[Any] = [HumanMessage(content=objective)]
+        for record in history:
+            messages.append(HumanMessage(content=f"Verified capability result:\n{record.to_dict()}"))
+        response = self.llm.invoke(messages=messages, role="planner", tools=self.registry.schemas())
+        calls = [PlannedCall(call["id"], call["name"], call.get("args", {})) for call in response.tool_calls]
+        # The planner can finish only after it has observed capability evidence, except for a task requiring no work.
+        return Plan(calls=calls, complete=not calls, planner_note=str(response.content or ""))

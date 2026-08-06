@@ -1,92 +1,27 @@
-from qwendolyn.utils.logging import get_logger
+"""Deterministic execution of planner-selected capability calls."""
+from __future__ import annotations
 
-logger = get_logger(__name__, log_file="executor")
+from dataclasses import dataclass
+from typing import Any
+
+from qwendolyn.capabilities.base import CapabilityResult
+
+
+@dataclass(slots=True)
+class ExecutionRecord:
+    call_id: str
+    operation: str
+    arguments: dict[str, Any]
+    result: CapabilityResult
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"call_id": self.call_id, "operation": self.operation, "arguments": self.arguments, "result": self.result.to_dict()}
 
 
 class Executor:
-
-    def __init__(
-        self,
-        registry,
-    ):
-
+    def __init__(self, registry: Any) -> None:
         self.registry = registry
 
-    def execute(
-        self,
-        plan: dict,
-    ) -> dict:
-
-        logger.info(
-            "Executing %d tool(s).",
-            len(plan["tool_calls"]),
-        )
-
-        execution = {
-            "assistant": plan["assistant"],
-            "tools": [],
-            "created_files": [],
-            "success": True,
-        }
-
-        for tool_call in plan["tool_calls"]:
-
-            function_name = tool_call["name"]
-            arguments = tool_call.get("args", {})
-
-            logger.info(
-                "Executing function '%s' with args=%s",
-                function_name,
-                arguments,
-            )
-
-            try:
-
-                result = self.registry.execute(
-                    function_name=function_name,
-                    **arguments,
-                )
-
-                execution["tools"].append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "function_name": function_name,
-                        "arguments": arguments,
-                        "result": result,
-                    }
-                )
-
-                if isinstance(result, dict):
-
-                    created = result.get(
-                        "created_files",
-                        [],
-                    )
-
-                    if created:
-                        execution["created_files"].extend(
-                            created
-                        )
-
-            except Exception as ex:
-
-                logger.exception(
-                    "Execution failed for '%s'",
-                    function_name,
-                )
-
-                execution["success"] = False
-
-                execution["tools"].append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "function_name": function_name,
-                        "arguments": arguments,
-                        "result": {
-                            "success": False,
-                            "error": str(ex),
-                        },
-                    }
-                )
-
-        return execution
+    def execute(self, call: Any) -> ExecutionRecord:
+        result = self.registry.execute(call.name, **call.arguments)
+        return ExecutionRecord(call.id, call.name, call.arguments, result)

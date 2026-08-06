@@ -1,510 +1,115 @@
+"""DuckDB metadata and SQL capability."""
+
+from __future__ import annotations
+
+import re
+import time
+import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import duckdb
 
 from qwendolyn import config
-from qwendolyn.capabilities.base import BaseCapability, CapabilityResult
-from qwendolyn.utils.logging import get_logger
-
-logger = get_logger(__name__, log_file="app")
+from qwendolyn.capabilities.base import BaseCapability, CapabilityError, CapabilityResult, empty_artifacts
 
 
 class DatabaseCapability(BaseCapability):
-
-    def __init__(
-        self,
-        database: str | Path | None = None,
-    ):
-
-        super().__init__(
-            name="database",
-            description="Execute SQL and manage Parquet data using DuckDB.",
-        )
-
-        self.database = Path(
-            database or config.DB / "qwendolyn.duckdb"
-        ).resolve()
-
-        self.database.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        logger.info(
-            "Initialized Database capability for %s",
-            self.database,
-        )
+    def __init__(self, database: str | Path | None = None) -> None:
+        super().__init__("database", "Manage DuckDB SQL, metadata, views, and Parquet import/export.")
+        self.database = Path(database or config.DB / "qwendolyn.duckdb").resolve()
+        self.database.parent.mkdir(parents=True, exist_ok=True)
 
     @property
-    def functions(self) -> list[dict]:
-
+    def functions(self) -> list[dict[str, Any]]:
         return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "run_sql",
-                    "description": "Execute arbitrary SQL against the DuckDB database.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "sql": {
-                                "type": "string",
-                                "description": "SQL statement to execute."
-                            }
-                        },
-                        "required": ["sql"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "list_tables",
-                    "description": "List every table in the database.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "list_views",
-                    "description": "List every view in the database.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "describe_table",
-                    "description": "Describe the schema of a table.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "table": {
-                                "type": "string"
-                            }
-                        },
-                        "required": ["table"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "table_exists",
-                    "description": "Check whether a table exists.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "table": {
-                                "type": "string"
-                            }
-                        },
-                        "required": ["table"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "drop_table",
-                    "description": "Drop a table if it exists.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "table": {
-                                "type": "string"
-                            }
-                        },
-                        "required": ["table"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "read_parquet",
-                    "description": "Load a Parquet file into a DuckDB table.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string"
-                            },
-                            "table_name": {
-                                "type": "string"
-                            }
-                        },
-                        "required": [
-                            "path",
-                            "table_name",
-                        ],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "append_parquet",
-                    "description": "Append a Parquet file to an existing DuckDB table.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string"
-                            },
-                            "table_name": {
-                                "type": "string"
-                            }
-                        },
-                        "required": [
-                            "path",
-                            "table_name",
-                        ],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "write_parquet",
-                    "description": "Export a DuckDB table to a Parquet file.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "table_name": {
-                                "type": "string"
-                            },
-                            "path": {
-                                "type": "string"
-                            }
-                        },
-                        "required": [
-                            "table_name",
-                            "path",
-                        ],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "query_parquet",
-                    "description": "Execute SQL directly against a Parquet file.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string"
-                            },
-                            "sql": {
-                                "type": "string",
-                                "description": "SQL using '{parquet}' as the table placeholder."
-                            }
-                        },
-                        "required": [
-                            "path",
-                            "sql",
-                        ],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_view",
-                    "description": "Create or replace a SQL view.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "view_name": {
-                                "type": "string"
-                            },
-                            "sql": {
-                                "type": "string"
-                            }
-                        },
-                        "required": [
-                            "view_name",
-                            "sql",
-                        ],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "vacuum",
-                    "description": "Run VACUUM.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "checkpoint",
-                    "description": "Checkpoint the database.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            },
+            self._schema("execute_sql", "Execute SQL and return rows for statements with result sets.", {"sql": {"type": "string"}}, ["sql"]),
+            self._schema("list_tables", "List database tables."),
+            self._schema("describe_table", "Return a table schema.", {"table": {"type": "string"}}, ["table"]),
+            self._schema("drop_table", "Drop a table if it exists.", {"table": {"type": "string"}}, ["table"]),
+            self._schema("create_view", "Create or replace a view from a SELECT query.", {"view": {"type": "string"}, "query": {"type": "string"}}, ["view", "query"]),
+            self._schema("list_views", "List database views."),
+            self._schema("import_parquet", "Import a Parquet file into a table.", {"path": {"type": "string"}, "table": {"type": "string"}}, ["path", "table"]),
+            self._schema("export_parquet", "Export a table or query to Parquet.", {"source": {"type": "string"}, "path": {"type": "string"}}, ["source", "path"]),
         ]
 
-    def _connect(self):
+    @staticmethod
+    def _schema(name: str, description: str, properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {"type": "object", "properties": properties or {}}
+        if required:
+            params["required"] = required
+        return {"type": "function", "function": {"name": name, "description": description, "parameters": params}}
 
+    @staticmethod
+    def _identifier(value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+            raise ValueError("Database identifiers must contain only letters, digits, and underscores.")
+        return value
+
+    @staticmethod
+    def _literal_path(value: str) -> str:
+        return value.replace("'", "''")
+
+    def _connect(self) -> duckdb.DuckDBPyConnection:
         return duckdb.connect(str(self.database))
 
-    def _success(
-        self,
-        message: str,
-        *,
-        data: Any = None,
-        tables: list[str] | None = None,
-        views: list[str] | None = None,
-        files: list[str] | None = None,
-        metrics: dict | None = None,
-    ) -> CapabilityResult:
+    def _ok(self, message: str, *, data: Any = None, tables: list[str] | None = None, views: list[str] | None = None, files: list[str] | None = None, metrics: dict[str, Any] | None = None) -> CapabilityResult:
+        artifacts = empty_artifacts()
+        artifacts.update(files=files or [], tables=tables or [], views=views or [])
+        return CapabilityResult(True, message, data=data, artifacts=artifacts, metrics=metrics or {})
 
-        return CapabilityResult(
-            success=True,
-            message=message,
-            data=data,
-            artifacts={
-                "files": files or [],
-                "tables": tables or [],
-                "views": views or [],
-                "vectors": [],
-            },
-            metrics=metrics or {},
-        )
+    def execute_sql(self, sql: str) -> CapabilityResult:
+        with self._connect() as connection:
+            cursor = connection.execute(sql)
+            if cursor.description is None:
+                return self._ok("SQL executed successfully.")
+            columns = [column[0] for column in cursor.description]
+            rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+        return self._ok("SQL query executed successfully.", data=rows, metrics={"rows": len(rows)})
 
-    def run_sql(
-        self,
-        sql: str,
-    ) -> CapabilityResult:
+    def list_tables(self) -> CapabilityResult:
+        result = self.execute_sql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE' ORDER BY table_name")
+        tables = [row["table_name"] for row in result.data or []]
+        result.artifacts["tables"] = tables
+        return result
 
-        logger.info("Executing SQL")
+    def describe_table(self, table: str) -> CapabilityResult:
+        table = self._identifier(table)
+        result = self.execute_sql(f"DESCRIBE {table}")
+        result.artifacts["tables"] = [table]
+        return result
 
-        with self._connect() as conn:
+    def drop_table(self, table: str) -> CapabilityResult:
+        table = self._identifier(table)
+        self.execute_sql(f"DROP TABLE IF EXISTS {table}")
+        return self._ok(f"Dropped table '{table}'.", tables=[table])
 
-            result = conn.execute(sql)
+    def create_view(self, view: str, query: str) -> CapabilityResult:
+        view = self._identifier(view)
+        self.execute_sql(f"CREATE OR REPLACE VIEW {view} AS {query}")
+        return self._ok(f"Created view '{view}'.", views=[view])
 
-            try:
+    def list_views(self) -> CapabilityResult:
+        result = self.execute_sql("SELECT table_name FROM information_schema.views WHERE table_schema = 'main' ORDER BY table_name")
+        result.artifacts["views"] = [row["table_name"] for row in result.data or []]
+        return result
 
-                df = result.fetchdf()
+    def import_parquet(self, path: str, table: str) -> CapabilityResult:
+        table = self._identifier(table)
+        self.execute_sql(f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM read_parquet('{self._literal_path(path)}')")
+        count = self.execute_sql(f"SELECT count(*) AS row_count FROM {table}")
+        return self._ok(f"Imported '{path}' into '{table}'.", tables=[table], metrics={"rows": count.data[0]["row_count"]})
 
-                return self._success(
-                    "SQL executed successfully.",
-                    data=df.to_dict("records"),
-                    metrics={
-                        "rows": len(df),
-                    },
-                )
+    def export_parquet(self, source: str, path: str) -> CapabilityResult:
+        self.execute_sql(f"COPY ({source}) TO '{self._literal_path(path)}' (FORMAT PARQUET)")
+        return self._ok(f"Exported Parquet to '{path}'.", files=[path])
 
-            except Exception:
-
-                return self._success(
-                    "SQL executed successfully."
-                )
-
-    def list_tables(self):
-
-        return self.run_sql("SHOW TABLES")
-
-    def list_views(self):
-
-        return self.run_sql(
-            """
-            SELECT table_name
-            FROM information_schema.views
-            """
-        )
-
-    def describe_table(
-        self,
-        table: str,
-    ):
-
-        return self.run_sql(
-            f"DESCRIBE {table}"
-        )
-
-    def table_exists(
-        self,
-        table: str,
-    ):
-
-        result = self.run_sql(
-            f"""
-            SELECT COUNT(*) AS cnt
-            FROM information_schema.tables
-            WHERE table_name='{table}'
-            """
-        )
-
-        exists = bool(
-            result.data[0]["cnt"]
-        )
-
-        return self._success(
-            f"Table '{table}' {'exists' if exists else 'does not exist'}.",
-            data=exists,
-        )
-
-    def drop_table(
-        self,
-        table: str,
-    ):
-
-        self.run_sql(
-            f"DROP TABLE IF EXISTS {table}"
-        )
-
-        return self._success(
-            f"Dropped table '{table}'."
-        )
-
-    def read_parquet(
-        self,
-        path: str,
-        table_name: str,
-    ):
-
-        self.run_sql(
-            f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{path}')
-            """
-        )
-
-        return self._success(
-            f"Loaded '{path}' into table '{table_name}'.",
-            tables=[table_name],
-        )
-
-    def append_parquet(
-        self,
-        path: str,
-        table_name: str,
-    ):
-
-        self.run_sql(
-            f"""
-            INSERT INTO {table_name}
-            SELECT *
-            FROM read_parquet('{path}')
-            """
-        )
-
-        return self._success(
-            f"Appended '{path}' to '{table_name}'.",
-            tables=[table_name],
-        )
-
-    def write_parquet(
-        self,
-        table_name: str,
-        path: str,
-    ):
-
-        self.run_sql(
-            f"""
-            COPY {table_name}
-            TO '{path}'
-            (FORMAT PARQUET)
-            """
-        )
-
-        return self._success(
-            f"Exported '{table_name}' to '{path}'.",
-            files=[path],
-        )
-
-    def query_parquet(
-        self,
-        path: str,
-        sql: str,
-    ):
-
-        sql = sql.replace(
-            "{parquet}",
-            f"read_parquet('{path}')",
-        )
-
-        return self.run_sql(sql)
-
-    def create_view(
-        self,
-        view_name: str,
-        sql: str,
-    ):
-
-        self.run_sql(
-            f"""
-            CREATE OR REPLACE VIEW {view_name} AS
-            {sql}
-            """
-        )
-
-        return self._success(
-            f"Created view '{view_name}'.",
-            views=[view_name],
-        )
-
-    def vacuum(self):
-
-        self.run_sql("VACUUM")
-
-        return self._success(
-            "VACUUM completed."
-        )
-
-    def checkpoint(self):
-
-        self.run_sql("CHECKPOINT")
-
-        return self._success(
-            "Checkpoint completed."
-        )
-
-    def execute(
-        self,
-        function_name: str,
-        **kwargs: Any,
-    ) -> CapabilityResult:
-
-        functions = {
-            "run_sql": self.run_sql,
-            "list_tables": self.list_tables,
-            "list_views": self.list_views,
-            "describe_table": self.describe_table,
-            "table_exists": self.table_exists,
-            "drop_table": self.drop_table,
-            "read_parquet": self.read_parquet,
-            "append_parquet": self.append_parquet,
-            "write_parquet": self.write_parquet,
-            "query_parquet": self.query_parquet,
-            "create_view": self.create_view,
-            "vacuum": self.vacuum,
-            "checkpoint": self.checkpoint,
-        }
-
-        if function_name not in functions:
-            raise ValueError(
-                f"Unknown database function '{function_name}'."
-            )
-
-        return functions[function_name](**kwargs)
+    def execute(self, function_name: str, **kwargs: Any) -> CapabilityResult:
+        operations: dict[str, Callable[..., CapabilityResult]] = {name: getattr(self, name) for name in ("execute_sql", "list_tables", "describe_table", "drop_table", "create_view", "list_views", "import_parquet", "export_parquet")}
+        start = time.perf_counter()
+        try:
+            result = operations[function_name](**kwargs)
+        except Exception as exc:
+            result = CapabilityResult(False, f"Database operation '{function_name}' failed.", error=CapabilityError(type(exc).__name__, str(exc), traceback.format_exc()))
+        result.metrics.setdefault("execution_time_seconds", round(time.perf_counter() - start, 3))
+        return result

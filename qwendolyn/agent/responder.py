@@ -1,77 +1,21 @@
-from langchain_core.messages import AIMessage, HumanMessage
+"""Evidence-bound final user communication."""
+from __future__ import annotations
 
-from qwendolyn.utils.logging import get_logger
+from typing import Any
 
-logger = get_logger(__name__, log_file="responder")
+from langchain_core.messages import HumanMessage
 
 
 class Responder:
-
-    def __init__(
-        self,
-        llm,
-    ):
-
+    def __init__(self, llm: Any) -> None:
         self.llm = llm
 
-    def respond(
-        self,
-        context: dict,
-    ) -> str:
-
-        logger.info("Generating final response.")
-
-        messages = [
-            HumanMessage(
-                content=context["prompt"],
-            )
-        ]
-
-        for execution in context["results"]:
-
-            messages.append(
-                execution["assistant"]
-            )
-
-            for tool in execution["tools"]:
-
-                messages.append(
-                    AIMessage(
-                        content=f"""
-Capability: {tool['function_name']}
-
-Arguments:
-{tool['arguments']}
-
-Result:
-{tool['result']}
-""".strip()
-                    )
-                )
-
-        messages.append(
-            HumanMessage(
-                content="""
-The task has completed.
-
-Summarize what you accomplished for the user.
-
-If files or tables were created, mention them.
-
-Do not generate Python code.
-
-Do not suggest how the user could perform the task.
-
-Only describe what was actually completed.
-""".strip()
-            )
-        )
-
-        response = self.llm.invoke(
-            messages=messages,
-            persona=context["persona"],
-        )
-
-        logger.info("Final response generated.")
-
-        return response.content
+    def respond(self, objective: str, history: list[Any], completed: bool, failure_reason: str | None = None) -> str:
+        evidence = [record.to_dict() for record in history]
+        message = HumanMessage(content=(
+            f"Objective:\n{objective}\n\nVerified capability results:\n{evidence}\n\n"
+            f"Task state: {'completed' if completed else 'not completed'}.\n"
+            f"Observed failure reason: {failure_reason or 'none'}."
+        ))
+        response = self.llm.invoke(messages=[message], role="responder")
+        return str(response.content)

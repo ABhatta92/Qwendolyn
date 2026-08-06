@@ -30,17 +30,6 @@ with st.sidebar:
 
     st.header("Settings")
 
-    persona = st.selectbox(
-        "Persona",
-        options=[
-            "developer",
-            "analyst",
-        ],
-        index=0,
-    )
-
-    st.divider()
-
     if st.button(
         "🗑️ Clear Conversation",
         use_container_width=True,
@@ -88,7 +77,6 @@ if prompt:
 
                 response = st.session_state.agent.run(
                     prompt=prompt,
-                    persona=persona,
                 )
 
             except Exception as ex:
