@@ -5,6 +5,9 @@ from qwendolyn.capabilities.python_tool import PythonCapability
 from qwendolyn.capabilities.registry import CapabilityRegistry
 from qwendolyn.config import DB, WORKSPACE
 from qwendolyn.llm import OllamaLLM
+from qwendolyn.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def create_agent(
@@ -15,6 +18,7 @@ def create_agent(
     Bootstrap the Qwendolyn agent.
     """
 
+    logger.info("Bootstrapping Qwendolyn (model=%s, temperature=%s).", model_name, temperature)
     llm = OllamaLLM(
         model_name=model_name,
         temperature=temperature,
@@ -40,7 +44,9 @@ def create_agent(
         )
     )
 
-    return Agent(
+    agent = Agent(
         llm=llm,
         registry=registry,
     )
+    logger.info("Qwendolyn bootstrap complete (capabilities=%s).", ", ".join(registry.list_capabilities()))
+    return agent

@@ -23,6 +23,7 @@ class PythonCapability(BaseCapability):
         self.working_directory = Path(working_directory or config.WORKSPACE).resolve()
         self.working_directory.mkdir(parents=True, exist_ok=True)
         self.timeout_seconds = timeout_seconds
+        logger.info("Python capability initialized (workspace=%s, timeout=%ss).", self.working_directory, timeout_seconds)
 
     @property
     def functions(self) -> list[dict[str, Any]]:
@@ -36,6 +37,7 @@ class PythonCapability(BaseCapability):
         script: Path | None = None
         start = time.perf_counter()
         try:
+            logger.info("Starting Python process (source_length=%d).", len(code))
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".py", dir=self.working_directory, delete=False) as handle:
                 handle.write(code)
                 script = Path(handle.name)
@@ -45,9 +47,12 @@ class PythonCapability(BaseCapability):
             artifacts["files"] = created
             data = {"stdout": process.stdout, "stderr": process.stderr, "return_code": process.returncode}
             if process.returncode == 0:
+                logger.info("Python process exited successfully (created_files=%d).", len(created))
                 return CapabilityResult(True, "Python executed successfully.", data=data, artifacts=artifacts, logs=["Python process completed."])
+            logger.warning("Python process exited with return code %d.", process.returncode)
             return CapabilityResult(False, "Python execution failed.", data=data, artifacts=artifacts, error=CapabilityError("PythonExecutionError", process.stderr or process.stdout))
         except subprocess.TimeoutExpired as exc:
+            logger.warning("Python process timed out after %s seconds.", self.timeout_seconds)
             return CapabilityResult(False, "Python execution timed out.", error=CapabilityError("TimeoutError", f"Execution exceeded {self.timeout_seconds} seconds.", traceback.format_exc()), data={"stdout": exc.stdout, "stderr": exc.stderr})
         except Exception as exc:
             logger.exception("Python execution failed")
@@ -64,4 +69,5 @@ class PythonCapability(BaseCapability):
         else:
             result = self.execute_python(**kwargs)
         result.metrics.setdefault("execution_time_seconds", round(time.perf_counter() - start, 3))
+        logger.info("Python operation finished: %s (success=%s, duration=%ss).", function_name, result.success, result.metrics["execution_time_seconds"])
         return result

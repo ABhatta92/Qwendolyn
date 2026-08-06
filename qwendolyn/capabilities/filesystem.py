@@ -22,6 +22,7 @@ class FileSystemCapability(BaseCapability):
         super().__init__("filesystem", "Manage files and directories inside the workspace.")
         self.workspace = Path(workspace or config.WORKSPACE).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
+        logger.info("Filesystem capability initialized (workspace=%s).", self.workspace)
 
     @property
     def functions(self) -> list[dict[str, Any]]:
@@ -101,10 +102,13 @@ class FileSystemCapability(BaseCapability):
     def execute(self, function_name: str, **kwargs: Any) -> CapabilityResult:
         operations: dict[str, Callable[..., CapabilityResult]] = {name: getattr(self, name) for name in ("list_files", "read_text", "write_text", "delete", "move", "copy", "create_directory", "exists")}
         start = time.perf_counter()
+        logger.info("Filesystem operation started: %s (argument_keys=%s).", function_name, sorted(kwargs))
         try:
             result = operations[function_name](**kwargs)
         except Exception as exc:
             logger.exception("Filesystem operation failed: %s", function_name)
             result = CapabilityResult(False, f"Filesystem operation '{function_name}' failed.", error=CapabilityError(type(exc).__name__, str(exc), traceback.format_exc()))
         result.metrics.setdefault("execution_time_seconds", round(time.perf_counter() - start, 3))
+        log_method = logger.info if result.success else logger.warning
+        log_method("Filesystem operation finished: %s (success=%s, duration=%ss).", function_name, result.success, result.metrics["execution_time_seconds"])
         return result

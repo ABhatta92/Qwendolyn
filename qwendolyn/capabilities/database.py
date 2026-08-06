@@ -12,6 +12,9 @@ import duckdb
 
 from qwendolyn import config
 from qwendolyn.capabilities.base import BaseCapability, CapabilityError, CapabilityResult, empty_artifacts
+from qwendolyn.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class DatabaseCapability(BaseCapability):
@@ -19,6 +22,7 @@ class DatabaseCapability(BaseCapability):
         super().__init__("database", "Manage DuckDB SQL, metadata, views, and Parquet import/export.")
         self.database = Path(database or config.DB / "qwendolyn.duckdb").resolve()
         self.database.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Database capability initialized (database=%s).", self.database)
 
     @property
     def functions(self) -> list[dict[str, Any]]:
@@ -107,9 +111,13 @@ class DatabaseCapability(BaseCapability):
     def execute(self, function_name: str, **kwargs: Any) -> CapabilityResult:
         operations: dict[str, Callable[..., CapabilityResult]] = {name: getattr(self, name) for name in ("execute_sql", "list_tables", "describe_table", "drop_table", "create_view", "list_views", "import_parquet", "export_parquet")}
         start = time.perf_counter()
+        logger.info("Database operation started: %s (argument_keys=%s).", function_name, sorted(kwargs))
         try:
             result = operations[function_name](**kwargs)
         except Exception as exc:
+            logger.exception("Database operation failed: %s", function_name)
             result = CapabilityResult(False, f"Database operation '{function_name}' failed.", error=CapabilityError(type(exc).__name__, str(exc), traceback.format_exc()))
         result.metrics.setdefault("execution_time_seconds", round(time.perf_counter() - start, 3))
+        log_method = logger.info if result.success else logger.warning
+        log_method("Database operation finished: %s (success=%s, duration=%ss).", function_name, result.success, result.metrics["execution_time_seconds"])
         return result
