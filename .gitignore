@@ -14,5 +14,5 @@ build/
 .idea/
 __init__.py
 workspace/
-scratch.txt
+current_prompt.txt
 *.ipynb
