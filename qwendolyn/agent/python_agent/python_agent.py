@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from qwendolyn.agent.agent import Agent
 from qwendolyn.agent.planner import Planner
 from qwendolyn.agent.python_agent.validator import Validator
