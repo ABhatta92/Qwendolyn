@@ -6,8 +6,7 @@ from pathlib import Path
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
-from qwendolyn.logging.run import Run
-from qwendolyn.logging.logger import get_logger
+from qwendolyn.logging.logging import get_logger
 
 logger = get_logger(__name__, log_file="llm")
 
@@ -53,9 +52,6 @@ class LLM:
     def invoke(
         self,
         messages: list[BaseMessage],
-        *,
-        run: Run | None = None,
-        iteration: int | None = None,
     ):
 
         prompt = [
@@ -76,8 +72,6 @@ class LLM:
             len(prompt),
         )
 
-        prompt_text = []
-
         for index, message in enumerate(
             prompt,
             start=1,
@@ -90,18 +84,7 @@ class LLM:
                 f"{message.content}"
             )
 
-            prompt_text.append(section)
-
             logger.info(section)
-
-        if (
-            run is not None
-            and iteration is not None
-        ):
-            run.save_prompt(
-                iteration,
-                "\n\n".join(prompt_text),
-            )
 
         start = time.perf_counter()
 
@@ -117,14 +100,5 @@ class LLM:
         logger.info(response.content)
         logger.info("Inference Time: %.2f sec", elapsed)
         logger.info("=" * 80)
-
-        if (
-            run is not None
-            and iteration is not None
-        ):
-            run.save_response(
-                iteration,
-                str(response.content),
-            )
 
         return response

@@ -6,8 +6,7 @@ import time
 from pathlib import Path
 
 from qwendolyn import config
-from qwendolyn.logging.run import Run
-from qwendolyn.logging.logger import get_logger
+from qwendolyn.logging.logging import get_logger
 
 logger = get_logger(__name__, log_file="runner")
 
@@ -53,9 +52,6 @@ class FrontendRunner:
     def execute(
         self,
         files: dict[str, str],
-        *,
-        run: Run | None = None,
-        iteration: int | None = None,
     ) -> dict:
 
         logger.info("=" * 80)
@@ -102,16 +98,6 @@ class FrontendRunner:
 
             logger.info("  + %s", relative)
 
-            if (
-                run is not None
-                and iteration is not None
-            ):
-                run.save_script(
-                    iteration,
-                    Path(relative_path).suffix.lstrip(".") or "txt",
-                    content,
-                )
-
         npm = shutil.which("npm")
 
         if npm is None:
@@ -125,15 +111,6 @@ class FrontendRunner:
                 "created_files": written_files,
                 "url": None,
             }
-
-            if (
-                run is not None
-                and iteration is not None
-            ):
-                run.save_execution(
-                    iteration,
-                    result,
-                )
 
             return result
 
@@ -170,15 +147,6 @@ class FrontendRunner:
                         "created_files": written_files,
                         "url": None,
                     }
-
-                    if (
-                        run is not None
-                        and iteration is not None
-                    ):
-                        run.save_execution(
-                            iteration,
-                            result,
-                        )
 
                     return result
 
@@ -221,15 +189,6 @@ class FrontendRunner:
                 "pid": process.pid,
             }
 
-            if (
-                run is not None
-                and iteration is not None
-            ):
-                run.save_execution(
-                    iteration,
-                    result,
-                )
-
             logger.info("=" * 80)
 
             return result
@@ -254,15 +213,6 @@ class FrontendRunner:
             "created_files": created,
             "url": None,
         }
-
-        if (
-            run is not None
-            and iteration is not None
-        ):
-            run.save_execution(
-                iteration,
-                result,
-            )
 
         logger.info("=" * 80)
 

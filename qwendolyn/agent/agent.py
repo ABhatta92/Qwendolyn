@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from langchain_core.messages import HumanMessage
 
-from qwendolyn.logging.run import Run
-from qwendolyn.logging.logger import get_logger
+from qwendolyn.logging.logging import get_logger
+
 
 logger = get_logger(__name__)
 
 
-CODE_BLOCK = re.compile(
-    r"```(?:python|html|javascript|js|json)?\s*(.*?)```",
-    flags=re.DOTALL | re.IGNORECASE,
-)
-
-
 @dataclass(slots=True)
-class ExecutionState:
+class AgentState:
     objective: str
-    iteration: int = 0
+    current_step: int = 0
     last_result: dict | None = None
+    completed_steps: list[str] | None = None
+
+    def __post_init__(self):
+        if self.completed_steps is None:
+            self.completed_steps = []
 
 
 class Agent:
@@ -31,29 +29,69 @@ class Agent:
         llm,
         runner,
         language: str,
+        planner=None,
+        validator=None,
         max_iterations: int = 20,
     ):
 
         self.llm = llm
         self.runner = runner
         self.language = language
+        self.planner = planner
+        self.validator = validator
         self.max_iterations = max_iterations
 
-    def _extract_code(
+    # -------------------------------------------------------------------------
+    # Planning
+    # -------------------------------------------------------------------------
+
+    def _create_plan(
         self,
-        response: str,
-    ) -> str | None:
+        objective: str,
+    ):
 
-        match = CODE_BLOCK.search(response)
+        if self.planner is None:
 
-        if match is None:
+            logger.info(
+                "No planner configured. Running directly."
+            )
+
             return None
 
-        return match.group(1).strip()
+        logger.info(
+            "Creating execution plan."
+        )
+
+        plan = self.planner.plan(
+            objective,
+        )
+
+        logger.info(
+            "Plan created with %d step(s).",
+            len(plan.steps),
+        )
+
+        for index, step in enumerate(
+            plan.steps,
+            start=1,
+        ):
+
+            logger.info(
+                "  %d. %s",
+                index,
+                step.description,
+            )
+
+        return plan
+
+    # -------------------------------------------------------------------------
+    # Prompt Construction
+    # -------------------------------------------------------------------------
 
     def _build_prompt(
         self,
-        state: ExecutionState,
+        state: AgentState,
+        step_description: str,
     ) -> str:
 
         sections = [
@@ -61,15 +99,33 @@ class Agent:
             "---------",
             state.objective,
             "",
+            "CURRENT STEP",
+            "------------",
+            step_description,
+            "",
         ]
+
+        if state.completed_steps:
+
+            sections.extend(
+                [
+                    "COMPLETED STEPS",
+                    "----------------",
+                    "\n".join(
+                        f"- {step}"
+                        for step in state.completed_steps
+                    ),
+                    "",
+                ]
+            )
 
         if state.last_result is None:
 
             sections.extend(
                 [
-                    "STATUS",
-                    "------",
-                    "No code has been executed yet.",
+                    "EXECUTION STATUS",
+                    "-----------------",
+                    "This step has not been executed yet.",
                     "",
                 ]
             )
@@ -82,23 +138,38 @@ class Agent:
                 [
                     "LAST EXECUTION",
                     "--------------",
-                    f"Success: {result['success']}",
-                    f"Return Code: {result['return_code']}",
-                    f"Execution Time: {result['execution_time']:.2f} sec",
+                    f"Success: {result.get('success')}",
+                    f"Return Code: {result.get('return_code')}",
+                    (
+                        f"Execution Time: "
+                        f"{result.get('execution_time', 0):.2f} sec"
+                    ),
                     "",
                     "Created Files",
                     "-------------",
-                    "\n".join(result["created_files"])
-                    if result["created_files"]
-                    else "None",
+                    "\n".join(
+                        result.get(
+                            "created_files",
+                            [],
+                        )
+                    )
+                    or "None",
                     "",
                     "STDOUT",
                     "------",
-                    result["stdout"] or "<empty>",
+                    result.get(
+                        "stdout",
+                        "",
+                    )
+                    or "<empty>",
                     "",
                     "STDERR",
                     "------",
-                    result["stderr"] or "<empty>",
+                    result.get(
+                        "stderr",
+                        "",
+                    )
+                    or "<empty>",
                     "",
                 ]
             )
@@ -107,140 +178,281 @@ class Agent:
             [
                 "INSTRUCTIONS",
                 "------------",
+                "Complete the current step.",
+                "Inspect the workspace and available data when necessary.",
                 "Generate ONE complete executable program.",
                 "Do not explain your reasoning.",
                 "Do not output multiple solutions.",
-                "If another execution is required, output exactly one fenced code block.",
-                "If the objective has been completely achieved and no further execution is required, do NOT output a code block.",
-                "Instead respond with:",
-                "",
-                "TASK COMPLETE",
-                "<concise summary>",
+                "If execution is required, output exactly one fenced code block.",
+                "Do not claim completion unless the current step has actually been completed.",
             ]
         )
 
-        return "\n".join(sections)
+        return "\n".join(
+            sections
+        )
 
-    def run(
+    # -------------------------------------------------------------------------
+    # Execution
+    # -------------------------------------------------------------------------
+
+    def _execute_step(
         self,
-        prompt: str,
-    ) -> str:
-
-        logger.info(
-            "Starting %s task.",
-            self.language,
-        )
-
-        run = Run(
-            agent=self.language,
-            objective=prompt,
-        )
-
-        state = ExecutionState(
-            objective=prompt,
-        )
+        state: AgentState,
+        step_description: str,
+    ) -> dict:
 
         previous_code: str | None = None
 
-        try:
+        for attempt in range(
+            1,
+            self.max_iterations + 1,
+        ):
 
-            for _ in range(
+            logger.info(
+                "Step attempt %d/%d",
+                attempt,
                 self.max_iterations,
+            )
+
+            prompt = self._build_prompt(
+                state,
+                step_description,
+            )
+
+            response = self.llm.invoke(
+                [
+                    HumanMessage(
+                        content=prompt,
+                    )
+                ]
+            )
+
+            content = str(
+                response.content
+            ).strip()
+
+            code = self._extract_code(
+                content
+            )
+
+            if code is None:
+
+                logger.info(
+                    "Model returned no executable code."
+                )
+
+                return {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": content,
+                    "stderr": "",
+                    "execution_time": 0.0,
+                    "created_files": [],
+                    "model_response": content,
+                }
+
+            if previous_code == code:
+
+                raise RuntimeError(
+                    "Model generated identical code twice."
+                )
+
+            previous_code = code
+
+            logger.info(
+                "Executing generated %s code.",
+                self.language,
+            )
+
+            result = self.runner.execute(
+                code,
+            )
+
+            state.last_result = result
+
+            if self.validator is None:
+
+                if result.get(
+                    "return_code"
+                ) == 0:
+
+                    return result
+
+                continue
+
+            validation = self.validator.validate(
+                step_description,
+                result,
+            )
+
+            result["validation"] = validation
+
+            logger.info(
+                "Validation success: %s",
+                validation.success,
+            )
+
+            if validation.warnings:
+
+                for warning in validation.warnings:
+
+                    logger.warning(
+                        "Validation warning: %s",
+                        warning,
+                    )
+
+            if validation.success:
+
+                return result
+
+            if validation.errors:
+
+                logger.error(
+                    "Validation failed:"
+                )
+
+                for error in validation.errors:
+
+                    logger.error(
+                        "  %s",
+                        error,
+                    )
+
+        raise RuntimeError(
+            f"Maximum attempts ({self.max_iterations}) "
+            f"exceeded for step: {step_description}"
+        )
+
+    # -------------------------------------------------------------------------
+    # Code Extraction
+    # -------------------------------------------------------------------------
+
+    def _extract_code(
+        self,
+        response: str,
+    ) -> str | None:
+
+        import re
+
+        pattern = re.compile(
+            r"```(?:python|html|javascript|js|json)?\s*"
+            r"(.*?)```",
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        match = pattern.search(
+            response
+        )
+
+        if match is None:
+
+            return None
+
+        return match.group(1).strip()
+
+    # -------------------------------------------------------------------------
+    # Public API
+    # -------------------------------------------------------------------------
+
+    def run(
+        self,
+        objective: str,
+    ) -> str:
+
+        logger.info(
+            "=" * 80
+        )
+
+        logger.info(
+            "Starting %s agent.",
+            self.language,
+        )
+
+        logger.info(
+            "Objective: %s",
+            objective,
+        )
+
+        state = AgentState(
+            objective=objective,
+        )
+
+        plan = self._create_plan(
+            objective,
+        )
+
+        # ---------------------------------------------------------------------
+        # No planner: direct execution mode
+        # ---------------------------------------------------------------------
+
+        if plan is None:
+
+            result = self._execute_step(
+                state,
+                objective,
+            )
+
+            if result.get(
+                "model_response"
             ):
 
-                iteration = run.next_iteration()
-                state.iteration = iteration
+                return result[
+                    "model_response"
+                ]
 
-                logger.info(
-                    "Iteration %d",
-                    iteration,
-                )
-
-                prompt_text = self._build_prompt(
-                    state,
-                )
-
-                response = self.llm.invoke(
-                    [
-                        HumanMessage(
-                            content=prompt_text,
-                        )
-                    ],
-                    run=run,
-                    iteration=iteration,
-                )
-
-                content = str(
-                    response.content,
-                ).strip()
-
-                if content.startswith(
-                    "TASK COMPLETE"
-                ):
-
-                    logger.info(
-                        "Task completed."
-                    )
-
-                    run.finish(
-                        success=True,
-                    )
-
-                    return content
-
-                code = self._extract_code(
-                    content,
-                )
-
-                if code is None:
-
-                    logger.info(
-                        "No executable code returned."
-                    )
-
-                    run.finish(
-                        success=True,
-                    )
-
-                    return content
-
-                if previous_code == code:
-
-                    run.finish(
-                        success=False,
-                    )
-
-                    raise RuntimeError(
-                        "Agent generated identical code twice. Possible infinite loop."
-                    )
-
-                previous_code = code
-
-                logger.info(
-                    "Executing generated %s program.",
-                    self.language,
-                )
-
-                result = self.runner.execute(
-                    code,
-                    run=run,
-                    iteration=iteration,
-                )
-
-                state.last_result = result
-
-            run.finish(
-                success=False,
+            return (
+                "TASK COMPLETE\n\n"
+                "Execution completed successfully."
             )
 
-            raise RuntimeError(
-                f"Maximum iterations ({self.max_iterations}) exceeded."
+        # ---------------------------------------------------------------------
+        # Planned execution mode
+        # ---------------------------------------------------------------------
+
+        for index, step in enumerate(
+            plan.steps,
+            start=1,
+        ):
+
+            state.current_step = index
+            state.last_result = None
+
+            logger.info(
+                "=" * 80
             )
 
-        except Exception:
-
-            run.finish(
-                success=False,
+            logger.info(
+                "Executing plan step %d/%d: %s",
+                index,
+                len(plan.steps),
+                step.description,
             )
 
-            raise
+            result = self._execute_step(
+                state,
+                step.description,
+            )
+
+            state.completed_steps.append(
+                step.description
+            )
+
+            logger.info(
+                "Plan step %d completed.",
+                index,
+            )
+
+        logger.info(
+            "=" * 80
+        )
+
+        logger.info(
+            "%s agent completed objective.",
+            self.language,
+        )
+
+        return (
+            "TASK COMPLETE\n\n"
+            f"Completed {len(plan.steps)} planned step(s)."
+        )

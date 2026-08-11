@@ -7,8 +7,7 @@ import time
 from pathlib import Path
 
 from qwendolyn import config
-from qwendolyn.logging.run import Run
-from qwendolyn.logging.logger import get_logger
+from qwendolyn.logging.logging import get_logger
 
 logger = get_logger(__name__, log_file="runner")
 
@@ -48,9 +47,6 @@ class PythonRunner:
     def execute(
         self,
         code: str,
-        *,
-        run: Run | None = None,
-        iteration: int | None = None,
     ) -> dict:
 
         logger.info("=" * 80)
@@ -75,16 +71,6 @@ class PythonRunner:
             "Temporary script: %s",
             script,
         )
-
-        if (
-            run is not None
-            and iteration is not None
-        ):
-            run.save_script(
-                iteration,
-                "py",
-                code,
-            )
 
         before = {
             path.relative_to(self.working_directory)
@@ -148,15 +134,6 @@ class PythonRunner:
                 ),
                 "created_files": created,
             }
-
-            if (
-                run is not None
-                and iteration is not None
-            ):
-                run.save_execution(
-                    iteration,
-                    result,
-                )
 
             return result
 
@@ -249,14 +226,5 @@ class PythonRunner:
             ),
             "created_files": created,
         }
-
-        if (
-            run is not None
-            and iteration is not None
-        ):
-            run.save_execution(
-                iteration,
-                result,
-            )
 
         return result

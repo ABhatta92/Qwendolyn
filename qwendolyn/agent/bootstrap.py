@@ -1,45 +1,49 @@
 from pathlib import Path
 
 from qwendolyn.agent.agent import Agent
+from qwendolyn.agent.planner import Planner
+from qwendolyn.agent.python_agent.validator import Validator
+from qwendolyn.config import WORKSPACE, AGENT_ROOT, QWENDOLYN_ROOT
 from qwendolyn.llm.llm import LLM
-from qwendolyn.runtime.frontend_runner import FrontendRunner
 from qwendolyn.runtime.python_runner import PythonRunner
-from qwendolyn.config import WORKSPACE
 
-PROMPTS = (
-    Path(__file__).resolve().parent.parent
-    / "llm"
-    / "prompts"
-)
+
+PYTHON_PROMPT = AGENT_ROOT / "python_agent" / "prompt.txt"
+PLANNER_PROMPT = QWENDOLYN_ROOT / "llm" / "prompts" / "planner.txt"
 
 
 def create_python_agent() -> Agent:
 
-    llm = LLM(
+    worker_llm = LLM(
         model_name="qwen3",
         temperature=0.1,
-        system_prompt=PROMPTS / "python.txt",
+        system_prompt=PYTHON_PROMPT,
     )
 
-    return Agent(
-        llm=llm,
-        runner=PythonRunner(working_directory=WORKSPACE),
-        language="Python",
-    )
-
-
-def create_frontend_agent() -> Agent:
-
-    llm = LLM(
+    planner_llm = LLM(
         model_name="qwen3",
-        temperature=0.3,
-        system_prompt=PROMPTS / "frontend.txt",
+        temperature=0.1,
+        system_prompt=PLANNER_PROMPT,
+    )
+
+    runner = PythonRunner(
+        working_directory=WORKSPACE,
+    )
+
+    planner = Planner(
+        llm=planner_llm,
+    )
+
+    validator = Validator(
+        workspace=WORKSPACE,
     )
 
     return Agent(
-        llm=llm,
-        runner=FrontendRunner(working_directory=WORKSPACE),
-        language="Frontend",
+        llm=worker_llm,
+        runner=runner,
+        planner=planner,
+        validator=validator,
+        language="Python",
     )
 
 
@@ -47,5 +51,4 @@ def create_agents() -> dict[str, Agent]:
 
     return {
         "Python": create_python_agent(),
-        "Frontend": create_frontend_agent(),
     }
