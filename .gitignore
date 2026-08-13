@@ -14,5 +14,5 @@ build/
 .idea/
 __init__.py
 workspace/
-current_prompt.txt
+test_prompts/
 *.ipynb
