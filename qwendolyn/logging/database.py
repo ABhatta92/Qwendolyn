@@ -47,6 +47,8 @@ def initialize_database(
                 status TEXT,
                 duration REAL,
                 message TEXT,
+                stdout TEXT,
+                stderr TEXT,
 
                 FOREIGN KEY (
                     run_id

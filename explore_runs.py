@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
@@ -89,7 +88,9 @@ def load_events(
                 event_type,
                 status,
                 duration,
-                message
+                message,
+                stdout,
+                stderr
             FROM events
             WHERE run_id = ?
             ORDER BY id ASC
@@ -109,7 +110,10 @@ def calculate_duration(
     status=None,
 ):
 
-    if started_at is None or pd.isna(started_at):
+    if (
+        started_at is None
+        or pd.isna(started_at)
+    ):
         return None
 
     try:
@@ -119,7 +123,6 @@ def calculate_duration(
             utc=True,
         )
 
-        # A running run has no finished_at yet.
         if (
             finished_at is None
             or pd.isna(finished_at)
@@ -199,6 +202,7 @@ def format_duration(
         )
 
     hours = minutes // 60
+
     minutes = minutes % 60
 
     return (
@@ -222,6 +226,19 @@ def status_icon(
         return "🔄"
 
     return "•"
+
+
+def safe_text(
+    value,
+) -> str:
+
+    if value is None:
+        return ""
+
+    if pd.isna(value):
+        return ""
+
+    return str(value)
 
 
 # =============================================================================
@@ -563,11 +580,17 @@ else:
                 f" · Attempt {int(attempt)}"
             )
 
-        message = event["message"]
+        message = safe_text(
+            event["message"]
+        )
 
-        if pd.isna(message):
+        stdout = safe_text(
+            event["stdout"]
+        )
 
-            message = ""
+        stderr = safe_text(
+            event["stderr"]
+        )
 
         with st.container(
             border=True
@@ -599,8 +622,56 @@ else:
             if message:
 
                 st.write(
-                    str(message)
+                    message
                 )
+
+            # -------------------------------------------------------------
+            # Execution evidence
+            # -------------------------------------------------------------
+
+            if event_type == "PYTHON_EXECUTION":
+
+                with st.expander(
+                    "Execution details",
+                    expanded=(
+                        event["status"]
+                        == "FAILED"
+                    ),
+                ):
+
+                    if stdout:
+
+                        st.markdown(
+                            "**stdout**"
+                        )
+
+                        st.code(
+                            stdout,
+                            language="text",
+                        )
+
+                    else:
+
+                        st.caption(
+                            "stdout: empty"
+                        )
+
+                    if stderr:
+
+                        st.markdown(
+                            "**stderr**"
+                        )
+
+                        st.code(
+                            stderr,
+                            language="text",
+                        )
+
+                    else:
+
+                        st.caption(
+                            "stderr: empty"
+                        )
 
 
 # =============================================================================

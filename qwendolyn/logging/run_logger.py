@@ -5,7 +5,10 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from qwendolyn.logging.database import DB_PATH, initialize_database
+from qwendolyn.logging.database import (
+    DB_PATH,
+    initialize_database,
+)
 
 
 class RunLogger:
@@ -147,6 +150,8 @@ class RunLogger:
         status: str | None = None,
         duration: float | None = None,
         message: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
     ) -> None:
 
         with self._connect() as connection:
@@ -161,9 +166,11 @@ class RunLogger:
                     event_type,
                     status,
                     duration,
-                    message
+                    message,
+                    stdout,
+                    stderr
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     self.run_id,
@@ -174,6 +181,8 @@ class RunLogger:
                     status,
                     duration,
                     message,
+                    stdout,
+                    stderr,
                 ),
             )
 
@@ -267,6 +276,8 @@ class RunLogger:
         duration: float | None = None,
         success: bool,
         message: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
     ) -> None:
 
         self.event(
@@ -280,6 +291,8 @@ class RunLogger:
             ),
             duration=duration,
             message=message,
+            stdout=stdout,
+            stderr=stderr,
         )
 
     def validation(

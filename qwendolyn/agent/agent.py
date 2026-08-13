@@ -137,8 +137,14 @@ class Agent:
                 sections.extend(
                     [
                         f"Step: {result['step']}",
-                        f"Success: {result['success']}",
-                        f"Return Code: {result['return_code']}",
+                        (
+                            "Execution Success: "
+                            f"{result.get('execution_success', False)}"
+                        ),
+                        (
+                            "Return Code: "
+                            f"{result.get('return_code')}"
+                        ),
                         "",
                         "Created Files",
                         "-------------",
@@ -177,8 +183,14 @@ class Agent:
                 [
                     "LAST EXECUTION",
                     "--------------",
-                    f"Success: {result.get('success')}",
-                    f"Return Code: {result.get('return_code')}",
+                    (
+                        "Execution Success: "
+                        f"{result.get('execution_success', False)}"
+                    ),
+                    (
+                        "Return Code: "
+                        f"{result.get('return_code')}"
+                    ),
                     (
                         "Execution Time: "
                         f"{result.get('execution_time', 0):.2f} sec"
@@ -219,8 +231,21 @@ class Agent:
                 "Do not provide multiple solutions.",
                 "Do not claim the step is complete without evidence.",
                 "",
-                "A successful step requires objective evidence from execution "
-                "and/or validation.",
+                "IMPORTANT:",
+                "A successful Python return code only means that the program "
+                "executed without an unhandled exception.",
+                "It does NOT mean that the current step was successfully "
+                "completed.",
+                "",
+                "Inspect stdout, stderr, created files, and other available "
+                "evidence after execution.",
+                "If the program executes successfully but does not actually "
+                "accomplish the current step, treat the step as unsuccessful.",
+                "Modify the approach and execute again.",
+                "",
+                "When practical, generated Python should validate its own "
+                "expected outputs and raise an error when required results "
+                "are missing, empty, malformed, or otherwise invalid.",
             ]
         )
 
@@ -312,9 +337,9 @@ class Agent:
                 content,
             )
 
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
             # No executable action
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
 
             if code is None:
 
@@ -334,6 +359,7 @@ class Agent:
 
                 return {
                     "success": False,
+                    "execution_success": False,
                     "return_code": None,
                     "stdout": content,
                     "stderr": (
@@ -344,9 +370,9 @@ class Agent:
                     "model_response": content,
                 }
 
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
             # Prevent identical retries
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
 
             if previous_code == code:
 
@@ -366,6 +392,7 @@ class Agent:
 
                 return {
                     "success": False,
+                    "execution_success": False,
                     "return_code": None,
                     "stdout": "",
                     "stderr": (
@@ -378,9 +405,9 @@ class Agent:
 
             previous_code = code
 
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
             # Python execution
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
 
             logger.info(
                 "Executing generated %s code.",
@@ -393,6 +420,27 @@ class Agent:
 
             state.last_result = result
 
+            execution_success = result.get(
+                "execution_success",
+                result.get(
+                    "success",
+                    False,
+                ),
+            )
+
+            # Keep both names available internally for compatibility.
+            result["execution_success"] = (
+                execution_success
+            )
+
+            result["success"] = (
+                execution_success
+            )
+
+            # -------------------------------------------------------------
+            # Record complete execution evidence
+            # -------------------------------------------------------------
+
             run.execution(
                 step=step_number,
                 attempt=attempt,
@@ -400,19 +448,24 @@ class Agent:
                     "execution_time",
                     0.0,
                 ),
-                success=result.get(
-                    "success",
-                    False,
-                ),
+                success=execution_success,
                 message=(
                     f"Return code: "
                     f"{result.get('return_code')}"
                 ),
+                stdout=result.get(
+                    "stdout",
+                    "",
+                ),
+                stderr=result.get(
+                    "stderr",
+                    "",
+                ),
             )
 
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
             # Validation
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
 
             if self.validator is not None:
 
@@ -464,19 +517,26 @@ class Agent:
 
                     return result
 
+                # Validation failed.
+                #
+                # Keep the result in state so the next LLM call can see
+                # exactly what went wrong.
+                state.last_result = result
+
                 continue
 
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
             # No validator
-            # -----------------------------------------------------------------
+            # -------------------------------------------------------------
 
-            if result.get(
-                "return_code"
-            ) == 0:
+            if execution_success:
 
                 result["model_response"] = content
 
                 return result
+
+            # Execution failed. The next attempt receives stdout/stderr
+            # through state.last_result.
 
         raise RuntimeError(
             f"Maximum attempts ({self.max_iterations}) "
@@ -633,6 +693,13 @@ class Agent:
                             "success",
                             False,
                         ),
+                        "execution_success": result.get(
+                            "execution_success",
+                            result.get(
+                                "success",
+                                False,
+                            ),
+                        ),
                         "return_code": result.get(
                             "return_code"
                         ),
@@ -756,6 +823,13 @@ class Agent:
                         "success": result.get(
                             "success",
                             False,
+                        ),
+                        "execution_success": result.get(
+                            "execution_success",
+                            result.get(
+                                "success",
+                                False,
+                            ),
                         ),
                         "return_code": result.get(
                             "return_code"
